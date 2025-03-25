@@ -1,0 +1,39 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "python": "${command:python.interpreterPath}",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "pythonArgs": [ "-Wd" ],
+            "justMyCode": false,
+            "args": [],
+            "env": {
+                "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+            },
+        },
+        {
+            "name": "Python Debugger: Train",
+            "type": "debugpy",
+            "python": "${command:python.interpreterPath}",
+            "request": "launch",
+            "program": "${workspaceFolder}/fno_unet/__main__.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "pythonArgs": [ "-O" ],
+            "args": [
+                "--debug",
+                "--dataset=CIFAR10",
+                "--no-compile",
+                "--device=cpu",
+                "--num-workers=0",
+            ],
+            "env": {
+                "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+            },
+        },
+    ],
+}
