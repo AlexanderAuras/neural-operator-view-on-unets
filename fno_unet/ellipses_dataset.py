@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 import torch.utils.data
 
-from fno_unet.covariance import generate_covmatrix
+from fno_unet.noise_filter import generate_noise_filter
 from fno_unet.radon_operator import RadonForward
 
 
@@ -72,7 +72,7 @@ class EllipsesDataset(torch.utils.data.Dataset[dict[str, Tensor]]):
         measurement = cast(Tensor, RadonForward.apply(groundtruth[None], 1000, torch.linspace(0.0, torch.pi, 1800)))
         noise = self.__noise_level * torch.randn_like(measurement)
         noise_fft = torch.fft.fftn(noise)
-        decay_filter = generate_covmatrix(measurement.shape[0])
+        decay_filter = generate_noise_filter(measurement.shape[0])
         filtered_noise_fft = noise_fft * decay_filter
         noise = torch.fft.ifftn(filtered_noise_fft).real
         measurement = torch.clamp(measurement + noise, min=0.0)
