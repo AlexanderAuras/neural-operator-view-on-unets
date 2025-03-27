@@ -9,7 +9,6 @@
     "files.exclude": {
         "**/__pycache__": true,
         ".ruff_cache": true,
-        "poetry.lock": true,
     },
     "terminal.integrated.scrollback": 10000,
     "git.autofetch": true,

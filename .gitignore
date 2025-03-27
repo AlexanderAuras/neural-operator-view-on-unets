@@ -1,0 +1,5 @@
+/.ruff_cache/
+/runs
+/data
+
+__pycache__/

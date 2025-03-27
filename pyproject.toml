@@ -11,7 +11,7 @@ keywords = ["neural networks", "neural operators"]
 # license = ""
 # license-files = [ "LICENSE" ]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "~=3.11.0"
 dynamic = [ "classifiers" ]
 
 #[project.urls]
@@ -24,8 +24,8 @@ dynamic = [ "classifiers" ]
 #ipnas = "fno_unet.__main__:main"
 
 [tool.poetry.dependencies]
-torch = { version = "^2.6", source = "torch-cuda" }
-astra-toolbox = "^2.3.0"
+torch = { version = "2.0.0", source = "torch-cuda" }
+astra-toolbox = "2.3.0"
 datasets = "^3.2.0"
 ipykernel = "^6.29.5"
 ipywidgets = "^8.1.5"
@@ -36,11 +36,11 @@ onnx = "^1.17.0"
 tensorboard = "^2.19.0"
 torchview = "^0.2.6"
 torchinfo = "^1.8.0"
-torchvision = "^0.21.0"
+torchvision = "0.15.1"
 
 [[tool.poetry.source]]
 name = "torch-cuda"
-url = "https://download.pytorch.org/whl/cu124"
+url = "https://download.pytorch.org/whl/cu117"
 priority = "explicit"
 
 [tool.poetry.group.dev]
