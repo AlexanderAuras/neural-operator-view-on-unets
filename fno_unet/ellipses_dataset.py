@@ -1,9 +1,10 @@
-from typing import cast, override
+from typing import cast
 
 import torch
 from torch import Tensor
 import torch.utils.data
 
+from fno_unet.covariance import generate_covmatrix
 from fno_unet.radon_operator import RadonForward
 
 
@@ -37,8 +38,7 @@ class EllipsesDataset(torch.utils.data.Dataset[dict[str, Tensor]]):
     def __len__(self) -> int:
         return self.__image_count
 
-    @override
-    def __getitem__(self, index: int) -> dict[str, Tensor]:
+    def __getitem__(self, index: int) -> dict[str, Tensor]:  # pyright: ignore [reportImplicitOverride]
         if index < 0:
             raise IndexError()
         if index >= self.__image_count:
@@ -71,8 +71,9 @@ class EllipsesDataset(torch.utils.data.Dataset[dict[str, Tensor]]):
             groundtruth = groundtruth / groundtruth.max()
         measurement = cast(Tensor, RadonForward.apply(groundtruth[None], 1000, torch.linspace(0.0, torch.pi, 1800)))
         noise = self.__noise_level * torch.randn_like(measurement)
-        noise_fft = torch.fft.rfftn(noise)
-        # ???
-        noise = torch.fft.irfftn(noise_fft).real
+        noise_fft = torch.fft.fftn(noise)
+        decay_filter = generate_covmatrix(measurement.shape[0])
+        filtered_noise_fft = noise_fft * decay_filter
+        noise = torch.fft.ifftn(filtered_noise_fft).real
         measurement = torch.clamp(measurement + noise, min=0.0)
         return {"input": measurement, "target": groundtruth[None]}

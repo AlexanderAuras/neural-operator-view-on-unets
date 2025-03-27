@@ -1,5 +1,5 @@
 from math import sqrt
-from typing import Any, override
+from typing import Any
 
 import astra
 import torch
@@ -8,8 +8,7 @@ import torch.utils.data
 
 class RadonForward(torch.autograd.Function):
     @staticmethod
-    @override
-    def forward(ctx: Any, img: torch.Tensor, det_count: int, angles: torch.Tensor) -> torch.Tensor:
+    def forward(ctx: Any, img: torch.Tensor, det_count: int, angles: torch.Tensor) -> torch.Tensor:  # pyright: ignore [reportImplicitOverride]
         ctx.img_shape = img.shape
         ctx.det_count = det_count
         ctx.save_for_backward(angles)
@@ -33,8 +32,7 @@ class RadonForward(torch.autograd.Function):
         return flat_batch_sino.reshape(*img.shape[:-2], *flat_batch_sino.shape[-2:])
 
     @staticmethod
-    @override
-    def backward(ctx: Any, *grad_outputs: Any) -> tuple[torch.Tensor, None, None]:
+    def backward(ctx: Any, *grad_outputs: Any) -> tuple[torch.Tensor, None, None]:  # pyright: ignore [reportImplicitOverride]
         img_shape = ctx.img_shape
         det_count = ctx.det_count
         (angles,) = ctx.saved_tensors
@@ -64,8 +62,7 @@ class RadonForward(torch.autograd.Function):
 
 class RadonBackward(torch.autograd.Function):
     @staticmethod
-    @override
-    def forward(ctx: Any, sino: torch.Tensor, img_shape: torch.Size, det_count: int, angles: torch.Tensor) -> torch.Tensor:
+    def forward(ctx: Any, sino: torch.Tensor, img_shape: torch.Size, det_count: int, angles: torch.Tensor) -> torch.Tensor:  # pyright: ignore [reportImplicitOverride]
         ctx.det_count = det_count
         ctx.save_for_backward(angles)
         img_geom_conf = astra.create_vol_geom((img_shape[-1], img_shape[-2]))
@@ -91,8 +88,7 @@ class RadonBackward(torch.autograd.Function):
         return flat_batch_img.reshape(*sino.shape[:-2], *flat_batch_img.shape[-2:])
 
     @staticmethod
-    @override
-    def backward(ctx: Any, *grad_outputs: Any) -> tuple[torch.Tensor, None, None, None]:
+    def backward(ctx: Any, *grad_outputs: Any) -> tuple[torch.Tensor, None, None, None]:  # pyright: ignore [reportImplicitOverride]
         det_count = ctx.det_count
         (angles,) = ctx.saved_tensors
         img = grad_outputs[0]
