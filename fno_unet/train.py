@@ -16,11 +16,11 @@ import torchinfo
 import torchview
 from tqdm.auto import tqdm, trange
 
+from fno_unet.classical_unet import UNet
 from fno_unet.ct_dataset import CTPostProcessDataset
 from fno_unet.ellipses_dataset import EllipsesDataset
-from fno_unet.classical_unet import UNet
-from fno_unet.interp_unet import InterpolatingUNet
 from fno_unet.fno_unet import FNOUNet
+from fno_unet.interp_unet import InterpolatingUNet
 
 
 OUT_DIR = Path(__file__).resolve().parents[1] / "runs" / randomname.get_name()
@@ -100,7 +100,7 @@ def main() -> None:
         case "UNet":
             model = UNet(1, 1).to(args.device)
         case "Interp":
-            model = InterpolatingUNet(1, 1, base_input_size=, max_scale_factor=).to(args.device)
+            model = InterpolatingUNet(1, 1, base_input_size=128, max_scale_factor=8).to(args.device)
         case "FNO":
             model = FNOUNet(1, 1).to(args.device)
         case _:

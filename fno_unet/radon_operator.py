@@ -6,7 +6,7 @@ import torch
 from typing_extensions import override
 
 
-class RadonForward(torch.autograd.Function):
+class Radon(torch.autograd.Function):
     @staticmethod
     @override
     def forward(ctx: Any, img: torch.Tensor, det_count: int, angles: torch.Tensor) -> torch.Tensor:
@@ -62,7 +62,7 @@ class RadonForward(torch.autograd.Function):
         return flat_batch_img.reshape(*sino.shape[:-2], *flat_batch_img.shape[-2:]), None, None
 
 
-class RadonBackward(torch.autograd.Function):
+class FilteredBackprojection(torch.autograd.Function):
     @staticmethod
     @override
     def forward(ctx: Any, sino: torch.Tensor, img_shape: torch.Size, det_count: int, angles: torch.Tensor) -> torch.Tensor:

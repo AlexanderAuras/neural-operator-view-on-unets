@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from typing_extensions import override
 
-from fno_unet.radon_operator import RadonBackward, RadonForward
+from fno_unet.radon_operator import FilteredBackprojection, Radon
 
 
 class CTPostProcessDataset(Dataset[dict[str, Tensor]]):
@@ -34,10 +34,10 @@ class CTPostProcessDataset(Dataset[dict[str, Tensor]]):
         if index >= len(cast(Sized, self.__image_dataset)):
             raise StopIteration()
         groundtruth = self.__image_dataset[index]["image"]
-        ideal_measurement = cast(Tensor, RadonForward.apply(groundtruth[None], self.__pos_count, self.__angles))
+        ideal_measurement = cast(Tensor, Radon.apply(groundtruth[None], self.__pos_count, self.__angles))
         target = F.interpolate(ideal_measurement[None], size=groundtruth.shape, mode="bilinear", align_corners=False)[0]
-        target = cast(Tensor, RadonBackward.apply(ideal_measurement[None], groundtruth.shape, self.__pos_count, self.__angles))
+        target = cast(Tensor, FilteredBackprojection.apply(ideal_measurement[None], groundtruth.shape, self.__pos_count, self.__angles))
         real_measurement = ideal_measurement[: ideal_measurement // 2]
         real_measurement += self.__noise_level * torch.randn_like(real_measurement)
-        input_ = cast(Tensor, RadonBackward.apply(real_measurement[None], groundtruth.shape, self.__pos_count, self.__angles[: ideal_measurement // 2]))
+        input_ = cast(Tensor, FilteredBackprojection.apply(real_measurement[None], groundtruth.shape, self.__pos_count, self.__angles[: ideal_measurement // 2]))
         return {"input": input_, "target": target}

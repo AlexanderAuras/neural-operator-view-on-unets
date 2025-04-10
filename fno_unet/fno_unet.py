@@ -1,3 +1,4 @@
+from typing import cast
 import warnings
 
 import torch
@@ -68,12 +69,17 @@ class FNOUNet(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         if x.ndim != 4:
             raise ValueError(f"Expected 4D input, got {x.ndim}D input")
-        if x.shape[-1] < 2 ** len(self.__down_blocks):
-            raise ValueError(f"Input width must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[-2]} input")
-        if x.shape[-2] < 2 ** len(self.__down_blocks):
-            raise ValueError(f"Input height must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[-2]} input")
-        if x.shape[-1] % 2 ** len(self.__down_blocks) != 0:
-            warnings.warn("Input size is not divisible by the number of downsampling operations. The output size may not match the input size.")
+        if x.shape[3] < 2 ** len(self.__down_blocks):
+            raise ValueError(f"Input width must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[3]}")
+        if x.shape[2] < 2 ** len(self.__down_blocks):
+            raise ValueError(f"Input height must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[2]}")
+        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self.__down_blocks[0])[0].weight.shape)[1]
+        if x.shape[1] != allowed_input_channels:
+            raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
+        if x.shape[3] % 2 ** len(self.__down_blocks) != 0:
+            warnings.warn("Input width is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
+        if x.shape[2] % 2 ** len(self.__down_blocks) != 0:
+            warnings.warn("Input height is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
         tmp = []
         for down_block in self.__down_blocks:
             x = down_block(x)
