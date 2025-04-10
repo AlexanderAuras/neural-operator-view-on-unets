@@ -1,14 +1,10 @@
-from typing import cast
-
 import torch
 from torch import Tensor
-import torch.utils.data
-
-from fno_unet.noise_filter import generate_noise_filter
-from fno_unet.radon_operator import RadonForward
+from torch.utils.data import Dataset
+from typing_extensions import override
 
 
-class EllipsesDataset(torch.utils.data.Dataset[dict[str, Tensor]]):
+class EllipsesDataset(Dataset[dict[str, Tensor]]):
     def __init__(
         self,
         image_count: int,
@@ -16,7 +12,6 @@ class EllipsesDataset(torch.utils.data.Dataset[dict[str, Tensor]]):
         ellipses_per_image: int,
         *,
         binary_output: bool = True,
-        noise_level: float,
         min_excentricity: float = 0.975,
         max_excentricity: float = 1.0,
         ellipse_scales: tuple[float, float] = (0.01, 0.06),
@@ -28,7 +23,6 @@ class EllipsesDataset(torch.utils.data.Dataset[dict[str, Tensor]]):
         self.__image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
         self.__ellipses_per_image = ellipses_per_image
         self.__binary_output = binary_output
-        self.__noise_level = noise_level
         self.__min_excentricity = min_excentricity
         self.__max_excentricity = max_excentricity
         self.__ellipse_scales = ellipse_scales
@@ -38,12 +32,12 @@ class EllipsesDataset(torch.utils.data.Dataset[dict[str, Tensor]]):
     def __len__(self) -> int:
         return self.__image_count
 
-    def __getitem__(self, index: int) -> dict[str, Tensor]:  # pyright: ignore [reportImplicitOverride]
+    @override
+    def __getitem__(self, index: int) -> dict[str, Tensor]:
         if index < 0:
             raise IndexError()
         if index >= self.__image_count:
             raise StopIteration()
-
         generator = torch.Generator()
         generator.manual_seed(index)
         sizes = torch.rand((1, 1, self.__ellipses_per_image, 2), generator=generator).sort(dim=-1, descending=True).values
@@ -69,11 +63,4 @@ class EllipsesDataset(torch.utils.data.Dataset[dict[str, Tensor]]):
             groundtruth = distances.sum(-1)
         if self.__normalize_intensities:
             groundtruth = groundtruth / groundtruth.max()
-        measurement = cast(Tensor, RadonForward.apply(groundtruth[None], 1000, torch.linspace(0.0, torch.pi, 1800)))
-        noise = self.__noise_level * torch.randn_like(measurement)
-        noise_fft = torch.fft.fftn(noise)
-        decay_filter = generate_noise_filter(measurement.shape[0])
-        filtered_noise_fft = noise_fft * decay_filter
-        noise = torch.fft.ifftn(filtered_noise_fft).real
-        measurement = torch.clamp(measurement + noise, min=0.0)
-        return {"input": measurement, "target": groundtruth[None]}
+        return {"input": groundtruth}

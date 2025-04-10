@@ -5,7 +5,10 @@ requires = ["poetry-core~=2.1"]
 [project]
 name = "fno_unet"
 version = "1.0.0"
-authors = [{ name = "Alexander Auras", email = "33501357+AlexanderAuras@users.noreply.github.com" }, { name = "Samira Kabri", email = "noreply@example.com" }]
+authors = [
+    { name = "Alexander Auras", email = "33501357+AlexanderAuras@users.noreply.github.com" },
+    { name = "Samira Kabri", email = "noreply@example.com" }
+]
 description = "UNets using fourier neural operators."
 keywords = ["neural networks", "neural operators"]
 # license = ""
@@ -24,6 +27,7 @@ dynamic = [ "classifiers" ]
 #ipnas = "fno_unet.__main__:main"
 
 [tool.poetry.dependencies]
+#torch = { version = "2.1.0", source = "torch-cuda" }
 torch = { version = "2.0.0", source = "torch-cuda" }
 astra-toolbox = "2.3.0"
 datasets = "^3.2.0"
@@ -36,10 +40,15 @@ onnx = "^1.17.0"
 tensorboard = "^2.19.0"
 torchview = "^0.2.6"
 torchinfo = "^1.8.0"
+#torchvision = "0.16.0"
 torchvision = "0.15.1"
+randomname = "^0.2.1"
+h5py = "^3.13.0"
+typing-extensions = "^4.13.0"
 
 [[tool.poetry.source]]
 name = "torch-cuda"
+#url = "https://download.pytorch.org/whl/cu121"
 url = "https://download.pytorch.org/whl/cu117"
 priority = "explicit"
 

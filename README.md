@@ -8,5 +8,5 @@
 
 ```bash
 pip install poetry
-poetry install --with dev
+poetry install -v --with dev
 ```
