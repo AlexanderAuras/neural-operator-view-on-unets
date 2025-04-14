@@ -4,7 +4,7 @@ import warnings
 import torch
 from torch import Tensor, nn
 from typing_extensions import override
-from fno_utils import SpectralConv2d
+from fno_unet.fno_utils import SpectralConv2d
 
 
 class FNOUNet(nn.Module):
@@ -14,7 +14,7 @@ class FNOUNet(nn.Module):
         out_channels: int,
         depth: int = 4,
         base_channels: int = 64,
-        kbase1: int = 128
+        kbase1: int = 128,
         kbase2: int = 128
     ) -> None:
         super().__init__()
@@ -32,7 +32,7 @@ class FNOUNet(nn.Module):
                     SpectralConv2d(base_channels* 2 ** (i - 1), base_channels* 2 ** (i - 1), ksize1 = kbase1//(2**i), ksize2 = kbase2//(2**i)),
                     SpectralConv2d(base_channels * 2 ** (i - 1), base_channels * 2**i, ksize1 = kbase1//(2**i), ksize2 = kbase2//(2**i)),
                     nn.ReLU(),
-                    SpectralConv2d(base_channels* 2 ** i, base_channels* 2 ** i, ksize1 = kbase1//(2**i), ksize2 = kbase2//(2**i)),,
+                    SpectralConv2d(base_channels* 2 ** i, base_channels* 2 ** i, ksize1 = kbase1//(2**i), ksize2 = kbase2//(2**i)),
                     nn.ReLU(),
                 )
                 for i in range(1, depth)
@@ -76,9 +76,9 @@ class FNOUNet(nn.Module):
             raise ValueError(f"Input width must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[3]}")
         if x.shape[2] < 2 ** len(self.__down_blocks):
             raise ValueError(f"Input height must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[2]}")
-        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self.__down_blocks[0])[0].weight.shape)[1]
+        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self.__down_blocks[0])[0].weight.shape)[0] # differs from CNN: CNN weight shape is out x in, FNO weight shape is in x out 
         if x.shape[1] != allowed_input_channels:
-            raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
+            raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}") 
         if x.shape[3] % 2 ** len(self.__down_blocks) != 0:
             warnings.warn("Input width is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
         if x.shape[2] % 2 ** len(self.__down_blocks) != 0:
