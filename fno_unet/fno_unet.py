@@ -4,6 +4,7 @@ import warnings
 import torch
 from torch import Tensor, nn
 from typing_extensions import override
+from fno_utils import SpectralConv2d
 
 
 class FNOUNet(nn.Module):
@@ -13,54 +14,56 @@ class FNOUNet(nn.Module):
         out_channels: int,
         depth: int = 4,
         base_channels: int = 64,
+        kbase1: int = 128
+        kbase2: int = 128
     ) -> None:
         super().__init__()
         self.__down_blocks = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.Conv2d(in_channels, base_channels, kernel_size=3, padding=1),
+                    SpectralConv2d(in_channels, base_channels, ksize1 = kbase1, ksize2 = kbase2),
                     nn.ReLU(),
-                    nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1),
+                    SpectralConv2d(base_channels, base_channels, ksize1 = kbase1, ksize2 = kbase2),
                     nn.ReLU(),
                 )
             ]
             + [
                 nn.Sequential(
-                    nn.MaxPool2d(2),
-                    nn.Conv2d(base_channels * 2 ** (i - 1), base_channels * 2**i, kernel_size=3, padding=1),
+                    SpectralConv2d(base_channels* 2 ** (i - 1), base_channels* 2 ** (i - 1), ksize1 = kbase1//(2**i), ksize2 = kbase2//(2**i)),
+                    SpectralConv2d(base_channels * 2 ** (i - 1), base_channels * 2**i, ksize1 = kbase1//(2**i), ksize2 = kbase2//(2**i)),
                     nn.ReLU(),
-                    nn.Conv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, padding=1),
+                    SpectralConv2d(base_channels* 2 ** i, base_channels* 2 ** i, ksize1 = kbase1//(2**i), ksize2 = kbase2//(2**i)),,
                     nn.ReLU(),
                 )
                 for i in range(1, depth)
             ]
         )
         self.__central_block = nn.Sequential(
-            nn.MaxPool2d(2),
-            nn.Conv2d(base_channels * 2 ** (depth - 1), base_channels * 2**depth, kernel_size=3, padding=1),
+            SpectralConv2d(base_channels* 2 ** (depth-1), base_channels* 2 ** (depth - 1), ksize1 = kbase1//(2**depth), ksize2 = kbase2//(2**depth)),
+            SpectralConv2d(base_channels * 2 ** (depth - 1), base_channels * 2**depth, ksize1 = kbase1//(2**depth), ksize2 = kbase2//(2**depth)),
             nn.ReLU(),
-            nn.Conv2d(base_channels * 2**depth, base_channels * 2**depth, kernel_size=3, padding=1),
+            SpectralConv2d(base_channels * 2**depth, base_channels * 2**depth, ksize1 = kbase1//(2**depth), ksize2 = kbase2//(2**depth)),
             nn.ReLU(),
-            nn.ConvTranspose2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=2, stride=2),
+            SpectralConv2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), ksize1 = kbase1//(2**(depth-1)), ksize2 = kbase2//(2**(depth-1))),
         )
         self.__up_blocks = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.Conv2d(base_channels * 2 ** (i + 1), base_channels * 2**i, kernel_size=3, padding=1),
+                    SpectralConv2d(base_channels * 2 ** (i + 1), base_channels * 2**i, ksize1 = kbase1//(2**i), ksize2 = kbase2//(2**i)),
                     nn.ReLU(),
-                    nn.Conv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, padding=1),
+                    SpectralConv2d(base_channels * 2**i, base_channels * 2**i, ksize1 = kbase1//(2**i), ksize2 = kbase2//(2**i)),
                     nn.ReLU(),
-                    nn.ConvTranspose2d(base_channels * 2**i, base_channels * 2 ** (i - 1), kernel_size=2, stride=2),
+                    SpectralConv2d(base_channels * 2**i, base_channels * 2 ** (i - 1), ksize1 = kbase1//(2**(i-1)), ksize2 = kbase2//(2**(i-1))),
                 )
                 for i in range(depth - 1, 0, -1)
             ]
             + [
                 nn.Sequential(
-                    nn.Conv2d(base_channels * 2, base_channels, kernel_size=3, padding=1),
+                    SpectralConv2d(base_channels * 2, base_channels, ksize1 = kbase1, ksize2 = kbase2),
                     nn.ReLU(),
-                    nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1),
+                    SpectralConv2d(base_channels, base_channels, ksize1 = kbase1, ksize2 = kbase2),
                     nn.ReLU(),
-                    nn.Conv2d(base_channels, out_channels, kernel_size=1),
+                    nn.Conv2d(base_channels, out_channels, kernel_size=1, bias = False),
                 )
             ]
         )
