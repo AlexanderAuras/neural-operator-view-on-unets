@@ -4,7 +4,7 @@ import warnings
 import torch
 from torch import Tensor, nn
 from typing_extensions import override
-from fno_unet.fno_utils import SpectralConv2d
+from fno_unet.fno_utils import SpectralConv2d_memory as SpectralConv2d
 
 
 class FNOUNet(nn.Module):
