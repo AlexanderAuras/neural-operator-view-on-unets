@@ -1,5 +1,5 @@
 {
-    "include": ["fno_unet/**/*.py"],
+    "include": ["fun/**/*.py"],
     "exclude": ["**/__pycache__/**"],
     "enableTypeIgnoreComments": false,
     "deprecateTypingAliases": true,

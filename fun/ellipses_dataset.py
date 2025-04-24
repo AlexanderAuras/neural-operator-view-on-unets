@@ -61,6 +61,6 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
             groundtruth = (distances.sum(-1) >= 1.0).to(torch.get_default_dtype())
         else:
             groundtruth = distances.sum(-1)
-        if self.__normalize_intensities:
+        if self.__normalize_intensities and groundtruth.max() > 1e-7:
             groundtruth = groundtruth / groundtruth.max()
         return {"input": groundtruth}

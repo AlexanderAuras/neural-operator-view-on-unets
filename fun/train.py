@@ -2,7 +2,9 @@ import argparse
 import os
 from pathlib import Path
 import random
+import shutil
 import sys
+import warnings
 import zipfile
 
 import numpy as np
@@ -16,11 +18,11 @@ import torchinfo
 import torchview
 from tqdm.auto import tqdm, trange
 
-from fno_unet.classical_unet import UNet
-from fno_unet.ct_dataset import CTPostProcessDataset
-from fno_unet.ellipses_dataset import EllipsesDataset
-from fno_unet.fno_unet import FNOUNet
-from fno_unet.interp_unet import InterpolatingUNet
+from fun.classical_unet import UNet
+from fun.ct_dataset import CTPostProcessDataset
+from fun.ellipses_dataset import EllipsesDataset
+from fun.fno_unet import FNOUNet
+from fun.interp_unet import InterpolatingUNet
 
 
 OUT_DIR = Path(__file__).resolve().parents[1] / "runs" / randomname.get_name()
@@ -45,16 +47,22 @@ def main() -> None:
     argparser.add_argument("--num-workers", type=int, default=os.cpu_count())
     argparser.add_argument("--no-compile", dest="compile", action="store_false")
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
-    argparser.add_argument("--dataset", choices=["LoDoPaB"], required=True)
-    argparser.add_argument("--model", choices=["Classic", "Interp", "FNO"], required=True)
+    argparser.add_argument("--dataset", choices=["ellipses"], required=True)
+    argparser.add_argument("--model", choices=["classic", "interp", "fno"], required=True)
     argparser.add_argument("--batch-size", type=int, default=32)
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
     argparser.add_argument("--model-save-freq", type=int, default=1)
-    argparser.add_argument("--noise-level", type=float, default=100.0)
+    argparser.add_argument("--noise-level", type=float, default=10.0)
+    argparser.add_argument("--img-size", type=int, default=256)
     args = argparser.parse_args()
 
+    if args.debug:
+        globals()["OUT_DIR"] = OUT_DIR.parent.joinpath("_debug")
+        if OUT_DIR.exists():
+            shutil.rmtree(OUT_DIR)
     OUT_DIR.mkdir(parents=True)
+    print("=" * 30 + " " + OUT_DIR.name.upper() + " " + "=" * 30)
 
     with zipfile.ZipFile(OUT_DIR / "code.zip", "w") as code_archive:
         for file in Path(__file__).parents[1].resolve().glob("ipnas/**/*.py"):
@@ -84,10 +92,10 @@ def main() -> None:
         #     train_dataset, val_dataset = torch.utils.data.random_split(trainval_dataset, [train_len, val_len])
         #     test_dataset = cast(Dataset[dict[str, Any]], datasets.load_dataset("CIFAR10", split="test").with_format("torch"))
         #     dataset_shapes = {"input": (3, 32, 32), "target": (1,)}
-        case "LoDoPaB":
-            train_dataset = CTPostProcessDataset(EllipsesDataset(6400, 256, 10), args.noise_level)
-            val_dataset = CTPostProcessDataset(EllipsesDataset(1600, 256, 10), args.noise_level)
-            test_dataset = CTPostProcessDataset(EllipsesDataset(2000, 256, 10), args.noise_level)
+        case "ellipses":
+            train_dataset = CTPostProcessDataset(EllipsesDataset(6400, 256, 10), args.noise_level, mr_sino_shape=(540, 300), lr_sino_shape=(180, 100))
+            val_dataset = CTPostProcessDataset(EllipsesDataset(1600, 256, 10), args.noise_level, mr_sino_shape=(540, 300), lr_sino_shape=(180, 100))
+            test_dataset = CTPostProcessDataset(EllipsesDataset(2000, 256, 10), args.noise_level, mr_sino_shape=(540, 300), lr_sino_shape=(180, 100))
             image_shape = (1, 256, 256)
         case _:
             raise ValueError(f'Unknown dataset: "{args.dataset}"')
@@ -97,23 +105,23 @@ def main() -> None:
 
     # Create model and log model information
     match args.model:
-        case "UNet":
+        case "classic":
             model = UNet(1, 1).to(args.device)
-        case "Interp":
+        case "interp":
             model = InterpolatingUNet(1, 1, base_input_size=128, max_scale_factor=8).to(args.device)
-        case "FNO":
+        case "fno":
             model = FNOUNet(1, 1).to(args.device)
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     fwd_func = torch.compile(model) if args.compile else model.__call__
-    compute_graph = torchview.draw_graph(model, input_size=(1, *image_shape), show_shapes=True, show_ops=True, show_attrs=True, show_coloring=True)
+    compute_graph = torchview.draw_graph(model, input_size=(1, *image_shape), show_shapes=True, device=args.device)
     compute_graph.visual_graph.render("compute-graph", directory=OUT_DIR, format="pdf")
     OUT_DIR.joinpath("compute-graph").unlink()
-    model_statistics = torchinfo.summary(model, input_size=(1, *image_shape), verbose=0)
+    model_statistics = torchinfo.summary(model, input_size=(1, *image_shape), verbose=0, device=args.device)
     print(model_statistics)
 
     # Create loss function, optimizer, and learning rate scheduler
-    loss_function = nn.CrossEntropyLoss()
+    loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.max_epochs)
 
@@ -124,11 +132,15 @@ def main() -> None:
     # Initial validation before training
     model.eval()
     val_loss = 0.0
-    for sample in tqdm(val_dataloader, desc="Validation", unit="batch", position=1, leave=False):
+    for i, sample in tqdm(enumerate(val_dataloader), total=len(val_dataloader), desc="Validation", unit="batch", position=1, leave=False):
         input_ = sample["input"].to(args.device)
         target = sample["target"].to(args.device)
         prediction = fwd_func(input_)
         val_loss += loss_function(prediction, target).item()
+        if i == 0:
+            [tb_logger.add_image(f"val/input-{j}", input_[j], global_step=0) for j in range(min(4, input_.shape[0]))]
+            [tb_logger.add_image(f"val/target-{j}", target[j], global_step=0) for j in range(min(4, target.shape[0]))]
+            [tb_logger.add_image(f"val/prediction-{j}", prediction[j], global_step=0) for j in range(min(4, prediction.shape[0]))]
     val_loss /= len(val_dataloader)
     best_val_loss = val_loss
     tb_logger.add_scalar("val/loss", val_loss, global_step=0)
@@ -157,11 +169,15 @@ def main() -> None:
             # Validate model
             model.eval()
             val_loss = 0.0
-            for sample in tqdm(val_dataloader, desc="Validation", unit="batch", position=1, leave=False):
+            for i, sample in tqdm(enumerate(val_dataloader), total=len(val_dataloader), desc="Validation", unit="batch", position=1, leave=False):
                 input_ = sample["input"].to(args.device)
                 target = sample["target"].to(args.device)
                 prediction = fwd_func(input_)
                 val_loss += loss_function(prediction, target).item()
+                if i == 0:
+                    [tb_logger.add_image(f"val/input-{j}", input_[j], global_step=(epoch + 1) * len(train_dataloader)) for j in range(min(4, input_.shape[0]))]
+                    [tb_logger.add_image(f"val/target-{j}", target[j], global_step=(epoch + 1) * len(train_dataloader)) for j in range(min(4, target.shape[0]))]
+                    [tb_logger.add_image(f"val/prediction-{j}", prediction[j], global_step=(epoch + 1) * len(train_dataloader)) for j in range(min(4, prediction.shape[0]))]
             val_loss /= len(val_dataloader)
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
@@ -171,7 +187,7 @@ def main() -> None:
             epochs_iter.set_postfix({"Val-Loss": val_loss})
 
             # Save model
-            if (epoch + 1) % args.model_log_freq == 0:
+            if (epoch + 1) % args.model_save_freq == 0:
                 torch.save(model.state_dict(), OUT_DIR / f"epoch-{epoch + 1}.pt")
         epochs_iter.close()
     except KeyboardInterrupt:
@@ -179,17 +195,23 @@ def main() -> None:
 
     # Save model after training
     torch.save(model.state_dict(), OUT_DIR / "final.pt")
-    torch.onnx.export(model, (torch.randn(image_shape),), str(OUT_DIR / "model.onnx"))
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, message=r"Converting a tensor to a Python boolean might cause the trace to be incorrect.*")
+    torch.onnx.export(model, (torch.randn((1, *image_shape), device=args.device),), str(OUT_DIR / "model.onnx"))
 
     # Test model and log test performance
     model.load_state_dict(torch.load(OUT_DIR / "best.pt"))
     model.eval()
     test_loss = 0.0
-    for sample in test_dataloader:
+    for i, sample in tqdm(enumerate(test_dataloader), total=len(test_dataloader), desc="Testing", unit="batch", position=0, leave=True):
         input_ = sample["input"].to(args.device)
         target = sample["target"].to(args.device)
         prediction = fwd_func(input_)
         test_loss += loss_function(prediction, target).item()
+        if i == 0:
+            [tb_logger.add_image(f"test/input-{j}", input_[j], global_step=0) for j in range(min(4, input_.shape[0]))]
+            [tb_logger.add_image(f"test/target-{j}", target[j], global_step=0) for j in range(min(4, target.shape[0]))]
+            [tb_logger.add_image(f"test/prediction-{j}", prediction[j], global_step=0) for j in range(min(4, prediction.shape[0]))]
     test_loss /= len(test_dataloader)
     print(f"Final Test-Loss: {test_loss}")
     tb_logger.add_scalar("test/loss", test_loss, global_step=0)

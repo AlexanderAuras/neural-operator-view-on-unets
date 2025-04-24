@@ -1,13 +1,13 @@
-include = ["fno_unet/**/*.py", "tests/**/*.py"]
+include = ["fun/**/*.py", "tests/**/*.py"]
 exclude = ["**/__pycache__/**"]
 fix = true
 line-length = 200
 
 [lint]
 extend-select = ["E"]
-#logger-objects = ["fno_unet.main.logger"]
+#logger-objects = ["fun.main.logger"]
 task-tags = ["TODO", "BUG", "HACK"]
-#typing-modules = ["fno_unet.types"]
+#typing-modules = ["fun.types"]
 
 [lint.flake8-bandit]
 hardcoded-tmp-directory = []
@@ -42,7 +42,7 @@ ban-relative-imports = "all"
 #"typing" = "Use pydantic.typing instead"
 
 [lint.flake8-type-checking]
-#exempt-modules = "fno_unet.types"
+#exempt-modules = "fun.types"
 strict = true
 
 [lint.isort]
