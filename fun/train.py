@@ -1,4 +1,5 @@
 import argparse
+from math import ceil
 import os
 from pathlib import Path
 import random
@@ -40,6 +41,10 @@ def __init_worker(_: int) -> None:
     torch.use_deterministic_algorithms(True, warn_only=True)
 
 
+def norm(tensor: torch.Tensor) -> torch.Tensor:
+    return (tensor - tensor.min()) / (tensor.max() - tensor.min())
+
+
 def main() -> None:
     # Parse command line arguments
     argparser = argparse.ArgumentParser()
@@ -55,8 +60,8 @@ def main() -> None:
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
     argparser.add_argument("--model-save-freq", type=int, default=1)
-    argparser.add_argument("--noise-level", type=float, default=10.0)
-    argparser.add_argument("--img-size", type=int, default=256)
+    argparser.add_argument("--noise-level", type=float, default=0.0)
+    argparser.add_argument("--angle-percent", type=float, default=0.75)
     args = argparser.parse_args()
 
     if args.debug:
@@ -89,49 +94,94 @@ def main() -> None:
     match args.dataset:
         case "ellipses-64x64":
             train_dataset = CTPostProcessDataset(
-                EllipsesDataset(1600, 1024, 10), angles=torch.linspace(0.0, torch.pi, 128), pos_count=32, target_shape=(64, 64), noise_type="gaussian", noise_level=args.noise_level
+                EllipsesDataset(1600, 1024, 10),
+                angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                pos_count=128,
+                target_shape=(64, 64),
+                noise_type="gaussian",
+                noise_level=args.noise_level,
             )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
                 "64x64": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10), angles=torch.linspace(0.0, torch.pi, 128), pos_count=32, target_shape=(64, 64), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(400, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
             }
             test_datasets = {
                 "64x64": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10), angles=torch.linspace(0.0, torch.pi, 128), pos_count=32, target_shape=(64, 64), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(500, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
             }
             exemplary_image_shape = (1, 64, 64)
         case "ellipses-128x128":
             train_dataset = CTPostProcessDataset(
-                EllipsesDataset(1600, 1024, 10), angles=torch.linspace(0.0, torch.pi, 256), pos_count=64, target_shape=(128, 128), noise_type="gaussian", noise_level=args.noise_level
+                EllipsesDataset(1600, 1024, 10),
+                angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                pos_count=256,
+                target_shape=(128, 128),
+                noise_type="gaussian",
+                noise_level=args.noise_level,
             )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
                 "128x128": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10), angles=torch.linspace(0.0, torch.pi, 256), pos_count=64, target_shape=(128, 128), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(400, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
             }
             test_datasets = {
                 "128x128": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10), angles=torch.linspace(0.0, torch.pi, 256), pos_count=64, target_shape=(128, 128), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(500, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
             }
             exemplary_image_shape = (1, 128, 128)
         case "ellipses-256x256":
             train_dataset = CTPostProcessDataset(
-                EllipsesDataset(1600, 1024, 10), angles=torch.linspace(0.0, torch.pi, 512), pos_count=128, target_shape=(256, 256), noise_type="gaussian", noise_level=args.noise_level
+                EllipsesDataset(1600, 1024, 10),
+                angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                pos_count=512,
+                target_shape=(256, 256),
+                noise_type="gaussian",
+                noise_level=args.noise_level,
             )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
                 "256x256": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10), angles=torch.linspace(0.0, torch.pi, 512), pos_count=128, target_shape=(256, 256), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(400, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
             }
             test_datasets = {
                 "256x256": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10), angles=torch.linspace(0.0, torch.pi, 512), pos_count=128, target_shape=(256, 256), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(500, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
             }
             exemplary_image_shape = (1, 256, 256)
@@ -139,37 +189,82 @@ def main() -> None:
             train_dataset = torch.utils.data.ConcatDataset(
                 [
                     CTPostProcessDataset(
-                        EllipsesDataset(1600, 1024, 10), angles=torch.linspace(0.0, torch.pi, 128), pos_count=32, target_shape=(64, 64), noise_type="gaussian", noise_level=args.noise_level
+                        EllipsesDataset(1600, 1024, 10),
+                        angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                        pos_count=128,
+                        target_shape=(64, 64),
+                        noise_type="gaussian",
+                        noise_level=args.noise_level,
                     ),
                     CTPostProcessDataset(
-                        EllipsesDataset(1600, 1024, 10), angles=torch.linspace(0.0, torch.pi, 256), pos_count=64, target_shape=(128, 128), noise_type="gaussian", noise_level=args.noise_level
+                        EllipsesDataset(1600, 1024, 10),
+                        angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                        pos_count=256,
+                        target_shape=(128, 128),
+                        noise_type="gaussian",
+                        noise_level=args.noise_level,
                     ),
                     CTPostProcessDataset(
-                        EllipsesDataset(1600, 1024, 10), angles=torch.linspace(0.0, torch.pi, 512), pos_count=128, target_shape=(256, 256), noise_type="gaussian", noise_level=args.noise_level
+                        EllipsesDataset(1600, 1024, 10),
+                        angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                        pos_count=512,
+                        target_shape=(256, 256),
+                        noise_type="gaussian",
+                        noise_level=args.noise_level,
                     ),
                 ]
             )
             train_batch_sampler = MultiResolutionBatchSampler([1600] * 3, batch_size=args.batch_size, shuffle=True, drop_incomplete=False)
             val_datasets = {
                 "64x64": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10), angles=torch.linspace(0.0, torch.pi, 128), pos_count=32, target_shape=(64, 64), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(400, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
                 "128x128": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10), angles=torch.linspace(0.0, torch.pi, 256), pos_count=64, target_shape=(128, 128), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(400, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
                 "256x256": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10), angles=torch.linspace(0.0, torch.pi, 512), pos_count=128, target_shape=(256, 256), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(400, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
             }
             test_datasets = {
                 "64x64": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10), angles=torch.linspace(0.0, torch.pi, 128), pos_count=32, target_shape=(64, 64), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(500, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
                 "128x128": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10), angles=torch.linspace(0.0, torch.pi, 256), pos_count=64, target_shape=(128, 128), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(500, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
                 "256x256": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10), angles=torch.linspace(0.0, torch.pi, 512), pos_count=128, target_shape=(256, 256), noise_type="gaussian", noise_level=args.noise_level
+                    EllipsesDataset(500, 1024, 10),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
                 ),
             }
             exemplary_image_shape = (1, 256, 256)
@@ -239,9 +334,9 @@ def main() -> None:
             prediction = fwd_func(input_)
             val_loss += loss_function(prediction, target).item()
             if i == 0:
-                [tb_logger.add_image(f"val/{name}-input-{j}", input_[j], global_step=0) for j in range(min(4, input_.shape[0]))]
-                [tb_logger.add_image(f"val/{name}-target-{j}", target[j], global_step=0) for j in range(min(4, target.shape[0]))]
-                [tb_logger.add_image(f"val/{name}-prediction-{j}", prediction[j], global_step=0) for j in range(min(4, prediction.shape[0]))]
+                [tb_logger.add_image(f"val/{name}-input-{j}", norm(input_[j]), global_step=0) for j in range(min(4, input_.shape[0]))]
+                [tb_logger.add_image(f"val/{name}-target-{j}", norm(target[j]), global_step=0) for j in range(min(4, target.shape[0]))]
+                [tb_logger.add_image(f"val/{name}-prediction-{j}", norm(prediction[j]), global_step=0) for j in range(min(4, prediction.shape[0]))]
         val_loss /= len(dataloader)
         best_val_losses[name] = val_loss
         tb_logger.add_scalar(f"val/{name}-loss", val_loss, global_step=0)
@@ -277,14 +372,14 @@ def main() -> None:
                     prediction = fwd_func(input_)
                     val_loss += loss_function(prediction, target).item()
                     if i == 0:
-                        [tb_logger.add_image(f"val/{name}-input-{j}", input_[j], global_step=(epoch + 1) * len(train_dataloader)) for j in range(min(4, input_.shape[0]))]
-                        [tb_logger.add_image(f"val/{name}-target-{j}", target[j], global_step=(epoch + 1) * len(train_dataloader)) for j in range(min(4, target.shape[0]))]
-                        [tb_logger.add_image(f"val/{name}-prediction-{j}", prediction[j], global_step=(epoch + 1) * len(train_dataloader)) for j in range(min(4, prediction.shape[0]))]
+                        [tb_logger.add_image(f"val/{name}-input-{j}", norm(input_[j]), global_step=epoch + 1) for j in range(min(4, input_.shape[0]))]
+                        [tb_logger.add_image(f"val/{name}-target-{j}", norm(target[j]), global_step=epoch + 1) for j in range(min(4, target.shape[0]))]
+                        [tb_logger.add_image(f"val/{name}-prediction-{j}", norm(prediction[j]), global_step=epoch + 1) for j in range(min(4, prediction.shape[0]))]
                 val_loss /= len(dataloader)
                 if val_loss < best_val_losses[name]:
                     best_val_losses[name] = val_loss
                     torch.save(model.state_dict(), OUT_DIR / f"best-{name}.pt")
-                tb_logger.add_scalar(f"val/{name}-loss", val_loss, global_step=(epoch + 1) * len(train_dataloader))
+                tb_logger.add_scalar(f"val/{name}-loss", val_loss, global_step=epoch + 1)
                 lr_scheduler.step()
 
             # Save model
@@ -311,9 +406,9 @@ def main() -> None:
             prediction = fwd_func(input_)
             test_loss += loss_function(prediction, target).item()
             if i == 0:
-                [tb_logger.add_image(f"test/{name}-input-{j}", input_[j], global_step=0) for j in range(min(4, input_.shape[0]))]
-                [tb_logger.add_image(f"test/{name}-target-{j}", target[j], global_step=0) for j in range(min(4, target.shape[0]))]
-                [tb_logger.add_image(f"test/{name}-prediction-{j}", prediction[j], global_step=0) for j in range(min(4, prediction.shape[0]))]
+                [tb_logger.add_image(f"test/{name}-input-{j}", norm(input_[j]), global_step=0) for j in range(min(4, input_.shape[0]))]
+                [tb_logger.add_image(f"test/{name}-target-{j}", norm(target[j]), global_step=0) for j in range(min(4, target.shape[0]))]
+                [tb_logger.add_image(f"test/{name}-prediction-{j}", norm(prediction[j]), global_step=0) for j in range(min(4, prediction.shape[0]))]
         test_loss /= len(dataloader)
         print(f'Final Test-Loss on "{name}": {test_loss}')
         tb_logger.add_scalar(f"test/{name}-loss", test_loss, global_step=0)

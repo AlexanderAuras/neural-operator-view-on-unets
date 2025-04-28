@@ -13,8 +13,10 @@ class Radon(torch.autograd.Function):
         ctx.img_shape = img.shape
         ctx.det_count = det_count
         ctx.save_for_backward(angles)
-        img_geom_conf = astra.create_vol_geom(img.shape[-1], img.shape[-2])  # , 0.0, 1.0, 0.0, 1.0)
+        img_geom_conf = astra.create_vol_geom(img.shape[-1], img.shape[-2], -img.shape[-2] / 2, img.shape[-2] / 2, -img.shape[-1] / 2, img.shape[-1] / 2)
+        # img_geom_conf = astra.create_vol_geom(img.shape[-1], img.shape[-2], -0.5, 0.5, -0.5, 0.5)
         proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img.shape[-1] ** 2 + img.shape[-2] ** 2) / det_count, det_count, angles.detach().to("cpu").numpy())
+        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().to("cpu").numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
         algo_conf = astra.astra_dict("FP_CUDA")
@@ -39,8 +41,10 @@ class Radon(torch.autograd.Function):
         det_count = ctx.det_count
         (angles,) = ctx.saved_tensors
         sino = grad_outputs[0]
-        img_geom_conf = astra.create_vol_geom(img_shape[-1], img_shape[-2])  # , 0.0, 1.0, 0.0, 1.0)
+        img_geom_conf = astra.create_vol_geom(img_shape[-1], img_shape[-2], -img_shape[-2] / 2, img_shape[-2] / 2, -img_shape[-1] / 2, img_shape[-1] / 2)
+        # img_geom_conf = astra.create_vol_geom(img_shape[-1], img_shape[-2], -0.5, 0.5, -0.5, 0.5)
         proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img_shape[-1] ** 2 + img_shape[-2] ** 2) / det_count, det_count, angles.detach().to("cpu").numpy())
+        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().to("cpu").numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
         proj_id = astra.create_projector("cuda", proj_geom_conf, img_geom_conf)
@@ -68,8 +72,10 @@ class FilteredBackprojection(torch.autograd.Function):
     def forward(ctx: Any, sino: torch.Tensor, img_shape: torch.Size, det_count: int, angles: torch.Tensor) -> torch.Tensor:
         ctx.det_count = det_count
         ctx.save_for_backward(angles)
-        img_geom_conf = astra.create_vol_geom(img_shape[-1], img_shape[-2])  # , 0.0, 1.0, 0.0, 1.0)
+        img_geom_conf = astra.create_vol_geom(img_shape[-1], img_shape[-2], -img_shape[-2] / 2, img_shape[-2] / 2, -img_shape[-1] / 2, img_shape[-1] / 2)
+        # img_geom_conf = astra.create_vol_geom(img_shape[-1], img_shape[-2], -0.5, 0.5, -0.5, 0.5)
         proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img_shape[-1] ** 2 + img_shape[-2] ** 2) / det_count, det_count, angles.detach().to("cpu").numpy())
+        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().to("cpu").numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
         proj_id = astra.create_projector("cuda", proj_geom_conf, img_geom_conf)
@@ -96,8 +102,10 @@ class FilteredBackprojection(torch.autograd.Function):
         det_count = ctx.det_count
         (angles,) = ctx.saved_tensors
         img = grad_outputs[0]
-        img_geom_conf = astra.create_vol_geom(img.shape[-1], img.shape[-2])  # , 0.0, 1.0, 0.0, 1.0)
+        img_geom_conf = astra.create_vol_geom(img.shape[-1], img.shape[-2], -img.shape[-2] / 2, img.shape[-2] / 2, -img.shape[-1] / 2, img.shape[-1] / 2)
+        # img_geom_conf = astra.create_vol_geom(img.shape[-1], img.shape[-2], -0.5, 0.5, -0.5, 0.5)
         proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img.shape[-1] ** 2 + img.shape[-2] ** 2) / det_count, det_count, angles.detach().to("cpu").numpy())
+        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().to("cpu").numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
         algo_conf = astra.astra_dict("FP_CUDA")

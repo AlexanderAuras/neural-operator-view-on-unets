@@ -29,8 +29,8 @@
                 "-O"
             ],
             "args": [
-                "--debug",
-                "--dataset=ellipses-64x64",
+                //"--debug",
+                "--dataset=ellipses-128x128",
                 "--model=classic",
                 "--batch-size=32",
                 "--max-epochs=10",

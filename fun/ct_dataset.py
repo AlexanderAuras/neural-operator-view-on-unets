@@ -16,7 +16,6 @@ class CTPostProcessDataset(Dataset[dict[str, Tensor]]):
         image_dataset: Dataset[dict[str, Tensor]],
         target_shape: tuple[int, int],
         angles: Tensor | None = None,
-        angle_threshold: int | None = None,
         pos_count: int = 1000,
         noise_type: Literal["gaussian", "poisson"] = "gaussian",
         noise_level: float = 0.0,
@@ -26,7 +25,6 @@ class CTPostProcessDataset(Dataset[dict[str, Tensor]]):
         self.__target_shape = target_shape
         self.__pos_count = pos_count
         self.__angles = angles if angles is not None else torch.linspace(0.0, torch.pi, 1800)
-        self.__angle_threshold = angle_threshold if angle_threshold is not None else self.__angles.shape[0] // 2
         self.__noise_level = noise_level
         self.__noise_type = noise_type
 
@@ -42,12 +40,11 @@ class CTPostProcessDataset(Dataset[dict[str, Tensor]]):
         groundtruth = self.__image_dataset[index]["input"]
         measurement = cast(Tensor, Radon.apply(groundtruth[None], self.__pos_count, self.__angles))[0]
         target = F.interpolate(groundtruth[None], size=self.__target_shape, mode="bilinear", align_corners=False)[0]
-        measurement = measurement[:, : self.__angle_threshold]
         if self.__noise_type == "gaussian":
             measurement = measurement + self.__noise_level * torch.randn_like(measurement)
         elif self.__noise_type == "poisson":
             measurement = torch.poisson(measurement)
         else:
             raise ValueError(f"Unknown noise type: {self.__noise_type}")
-        input_ = cast(Tensor, FilteredBackprojection.apply(measurement[None], self.__target_shape, self.__pos_count, self.__angles[: self.__angle_threshold]))[0]
-        return {"input": input_, "target": target}
+        input_ = cast(Tensor, FilteredBackprojection.apply(measurement[None], self.__target_shape, self.__pos_count, self.__angles))[0]
+        return {"input": input_ * self.__target_shape[-1], "target": target * groundtruth.shape[-1]}
