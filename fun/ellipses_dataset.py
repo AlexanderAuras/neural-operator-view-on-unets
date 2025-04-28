@@ -11,12 +11,13 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
         image_size: tuple[int, int] | int,
         ellipses_per_image: int,
         *,
-        binary_output: bool = True,
+        binary_output: bool = False,
         min_excentricity: float = 0.975,
         max_excentricity: float = 1.0,
         ellipse_scales: tuple[float, float] = (0.01, 0.06),
         ellipse_intensities: tuple[float, float] = (0.1, 1.0),
         normalize_intensities: bool = True,
+        seed: int | None = None,
     ) -> None:
         super().__init__()
         self.__image_count = image_count
@@ -28,6 +29,7 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
         self.__ellipse_scales = ellipse_scales
         self.__ellipse_intensities = ellipse_intensities
         self.__normalize_intensities = normalize_intensities
+        self.__seed = seed if seed is not None else int(torch.randint(2**32, (1,)).item())
 
     def __len__(self) -> int:
         return self.__image_count
@@ -39,7 +41,7 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
         if index >= self.__image_count:
             raise StopIteration()
         generator = torch.Generator()
-        generator.manual_seed(index)
+        generator.manual_seed((index + self.__seed) % 2**32)
         sizes = torch.rand((1, 1, self.__ellipses_per_image, 2), generator=generator).sort(dim=-1, descending=True).values
         sizes = self.__ellipse_scales[0] + (self.__ellipse_scales[1] - self.__ellipse_scales[0]) * sizes
         tmp = sizes[..., 1] > (1.0 - self.__min_excentricity**2) ** 0.5 * sizes[..., 0]
@@ -58,9 +60,9 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
         distances[tmp] = (tmp * intensities)[tmp]
         distances[~tmp] = 0.0
         if self.__binary_output:
-            groundtruth = (distances.sum(-1) >= 1.0).to(torch.get_default_dtype())
+            groundtruth = (distances.sum(-1) > 0.0).to(torch.get_default_dtype())
         else:
             groundtruth = distances.sum(-1)
-        if self.__normalize_intensities and groundtruth.max() > 1e-7:
-            groundtruth = groundtruth / groundtruth.max()
-        return {"input": groundtruth}
+        if self.__normalize_intensities:
+            groundtruth = groundtruth / (self.__ellipses_per_image * self.__ellipse_intensities[1])
+        return {"input": groundtruth[None]}

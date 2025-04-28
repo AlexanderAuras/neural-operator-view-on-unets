@@ -8,7 +8,9 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "pythonArgs": [ "-Wd" ],
+            "pythonArgs": [
+                "-Wd"
+            ],
             "justMyCode": false,
             "args": [],
             "env": {
@@ -23,10 +25,12 @@
             "program": "${workspaceFolder}/fun/train.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "pythonArgs": [ "-O" ],
+            "pythonArgs": [
+                "-O"
+            ],
             "args": [
                 "--debug",
-                "--dataset=ellipses",
+                "--dataset=ellipses-64x64",
                 "--model=classic",
                 "--batch-size=32",
                 "--max-epochs=10",
