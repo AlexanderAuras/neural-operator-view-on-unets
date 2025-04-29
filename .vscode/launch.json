@@ -30,7 +30,7 @@
             ],
             "args": [
                 //"--debug",
-                "--dataset=ellipses-128x128",
+                "--dataset=ellipses-256x256",
                 "--model=classic",
                 "--batch-size=32",
                 "--max-epochs=10",

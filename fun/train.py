@@ -94,7 +94,7 @@ def main() -> None:
     match args.dataset:
         case "ellipses-64x64":
             train_dataset = CTPostProcessDataset(
-                EllipsesDataset(1600, 1024, 10),
+                EllipsesDataset(6400, 1024, 10),
                 angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                 pos_count=128,
                 target_shape=(64, 64),
@@ -104,7 +104,7 @@ def main() -> None:
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
                 "64x64": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10),
+                    EllipsesDataset(1600, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                     pos_count=128,
                     target_shape=(64, 64),
@@ -114,7 +114,7 @@ def main() -> None:
             }
             test_datasets = {
                 "64x64": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10),
+                    EllipsesDataset(2000, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                     pos_count=128,
                     target_shape=(64, 64),
@@ -125,7 +125,7 @@ def main() -> None:
             exemplary_image_shape = (1, 64, 64)
         case "ellipses-128x128":
             train_dataset = CTPostProcessDataset(
-                EllipsesDataset(1600, 1024, 10),
+                EllipsesDataset(6400, 1024, 10),
                 angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                 pos_count=256,
                 target_shape=(128, 128),
@@ -135,7 +135,7 @@ def main() -> None:
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
                 "128x128": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10),
+                    EllipsesDataset(1600, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                     pos_count=256,
                     target_shape=(128, 128),
@@ -145,7 +145,7 @@ def main() -> None:
             }
             test_datasets = {
                 "128x128": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10),
+                    EllipsesDataset(2000, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                     pos_count=256,
                     target_shape=(128, 128),
@@ -156,7 +156,7 @@ def main() -> None:
             exemplary_image_shape = (1, 128, 128)
         case "ellipses-256x256":
             train_dataset = CTPostProcessDataset(
-                EllipsesDataset(1600, 1024, 10),
+                EllipsesDataset(6400, 1024, 10),
                 angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                 pos_count=512,
                 target_shape=(256, 256),
@@ -166,7 +166,7 @@ def main() -> None:
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
                 "256x256": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10),
+                    EllipsesDataset(1600, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                     pos_count=512,
                     target_shape=(256, 256),
@@ -176,7 +176,7 @@ def main() -> None:
             }
             test_datasets = {
                 "256x256": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10),
+                    EllipsesDataset(2000, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                     pos_count=512,
                     target_shape=(256, 256),
@@ -189,7 +189,7 @@ def main() -> None:
             train_dataset = torch.utils.data.ConcatDataset(
                 [
                     CTPostProcessDataset(
-                        EllipsesDataset(1600, 1024, 10),
+                        EllipsesDataset(2133, 1024, 10),
                         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                         pos_count=128,
                         target_shape=(64, 64),
@@ -197,7 +197,7 @@ def main() -> None:
                         noise_level=args.noise_level,
                     ),
                     CTPostProcessDataset(
-                        EllipsesDataset(1600, 1024, 10),
+                        EllipsesDataset(2133, 1024, 10),
                         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                         pos_count=256,
                         target_shape=(128, 128),
@@ -205,7 +205,7 @@ def main() -> None:
                         noise_level=args.noise_level,
                     ),
                     CTPostProcessDataset(
-                        EllipsesDataset(1600, 1024, 10),
+                        EllipsesDataset(2133, 1024, 10),
                         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                         pos_count=512,
                         target_shape=(256, 256),
@@ -217,7 +217,7 @@ def main() -> None:
             train_batch_sampler = MultiResolutionBatchSampler([1600] * 3, batch_size=args.batch_size, shuffle=True, drop_incomplete=False)
             val_datasets = {
                 "64x64": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10),
+                    EllipsesDataset(533, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                     pos_count=128,
                     target_shape=(64, 64),
@@ -225,7 +225,7 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
                 "128x128": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10),
+                    EllipsesDataset(533, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                     pos_count=256,
                     target_shape=(128, 128),
@@ -233,7 +233,7 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
                 "256x256": CTPostProcessDataset(
-                    EllipsesDataset(400, 1024, 10),
+                    EllipsesDataset(533, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                     pos_count=512,
                     target_shape=(256, 256),
@@ -243,7 +243,7 @@ def main() -> None:
             }
             test_datasets = {
                 "64x64": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10),
+                    EllipsesDataset(667, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                     pos_count=128,
                     target_shape=(64, 64),
@@ -251,7 +251,7 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
                 "128x128": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10),
+                    EllipsesDataset(667, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                     pos_count=256,
                     target_shape=(128, 128),
@@ -259,7 +259,7 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
                 "256x256": CTPostProcessDataset(
-                    EllipsesDataset(500, 1024, 10),
+                    EllipsesDataset(667, 1024, 10),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                     pos_count=512,
                     target_shape=(256, 256),
