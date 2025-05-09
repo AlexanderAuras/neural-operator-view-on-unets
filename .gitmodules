@@ -1,0 +1,3 @@
+[submodule "WeightVizWiz"]
+	path = WeightVizWiz
+	url = https://github.com/AlexanderAuras/WeightVizWiz.git

@@ -12,6 +12,15 @@
             },
             "command": "${command:python.interpreterPath} -c \"import tensorboard.main; tensorboard.main.run_main()\" --samples_per_plugin=SCALARS=10000 --logdir=${workspaceFolder}/runs",
             "problemMatcher": [],
+        },
+        {
+            "label": "WeightVizWiz",
+            "type": "shell",
+            "options": { 
+                "cwd": "${workspaceFolder}",
+            },
+            "command": "${command:python.interpreterPath} WeightVizWiz/wvw/__main__.py",
+            "problemMatcher": [],
         }
     ]
 }

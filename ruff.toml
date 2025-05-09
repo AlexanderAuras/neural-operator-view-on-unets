@@ -1,7 +1,7 @@
 include = ["fun/**/*.py", "tests/**/*.py"]
 exclude = ["**/__pycache__/**"]
 fix = true
-line-length = 200
+line-length = 180
 
 [lint]
 extend-select = ["E"]

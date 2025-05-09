@@ -29,7 +29,7 @@
                 "-O"
             ],
             "args": [
-                //"--debug",
+                "--debug",
                 "--dataset=ellipses-256x256",
                 "--model=classic",
                 "--batch-size=32",
@@ -40,7 +40,7 @@
             ],
             "env": {
                 "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
-                "LD_LIBRARY_PATH": "${env:LD_LIBRARY_PATH}:/home/alexander/anaconda3/envs/FNO-UNet/lib/python3.11/site-packages/nvidia/cufft/lib",
+                "LD_LIBRARY_PATH": "${env:LD_LIBRARY_PATH}:/home/alexander/anaconda3/envs/FNO-UNet/lib/python3.11/site-packages/nvidia/cufft/lib:/home/aa609734/.conda/envs/FNO-UNet/lib/python3.11/site-packages/nvidia/cufft/lib",
             },
         },
     ],

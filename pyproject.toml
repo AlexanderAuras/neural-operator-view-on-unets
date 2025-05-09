@@ -28,7 +28,6 @@ dynamic = [ "classifiers" ]
 
 [tool.poetry.dependencies]
 torch = { version = "2.1.0", source = "torch-cuda" }
-#torch = { version = "2.0.0", source = "torch-cuda" }
 astra-toolbox = "2.3.1"
 datasets = "^3.2.0"
 ipykernel = "^6.29.5"
@@ -41,7 +40,6 @@ tensorboard = "^2.19.0"
 torchview = "^0.2.6"
 torchinfo = "^1.8.0"
 torchvision = "0.16.0"
-#torchvision = "0.15.1"
 randomname = "^0.2.1"
 h5py = "^3.13.0"
 typing-extensions = "^4.13.0"
@@ -50,7 +48,6 @@ aiohttp = "!=3.11.14"  # Autoselected version 3.11.14 is yanked
 [[tool.poetry.source]]
 name = "torch-cuda"
 url = "https://download.pytorch.org/whl/cu121"
-#url = "https://download.pytorch.org/whl/cu117"
 priority = "explicit"
 
 [tool.poetry.group.dev]
@@ -61,6 +58,12 @@ pyright = "^1.1.397"
 black = "^25.1.0"
 debugpy = "^1.8.13"
 ruff = "^0.11.2"
+
+[tool.poetry.group.viz]
+optional = true
+
+[tool.poetry.group.viz.dependencies]
+wvw = { path = "./WeightVizWiz" }
 
 [tool.poetry]
 requires-poetry = "~=2.0"

@@ -29,10 +29,9 @@
     "python.analysis.fixAll": [
         "source.convertImportFormat",
     ],
-    "redhat.telemetry.enabled": false,
     "editor.formatOnSave": true,
     "editor.accessibilitySupport": "off",
-    "github.copilot.editor.enableAutoCompletions": true,
+    "github.copilot.enable": { "*": true, },
     "notebook.editorOptionsCustomizations": {
         "editor.tabSize": 4,
         "editor.indentSize": 4,

@@ -1,7 +1,11 @@
 /poetry.lock
 
 /.ruff_cache/
-/runs
+/runs/*/*
+!/runs/*/*.csv
+!/runs/*/*.log
+!/runs/*/compute-graph.pdf
+!/runs/*/events.out.tfevents.*
 /data
 
 __pycache__/
