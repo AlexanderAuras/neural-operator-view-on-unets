@@ -29,7 +29,7 @@ from tqdm.auto import tqdm, trange
 from fun.classical_unet import UNet
 from fun.ct_dataset import CTPostProcessDataset
 from fun.ellipses_dataset import EllipsesDataset
-from fun.fno_unet import FNOUNet
+from fun.fno_unet import FNOUNet, HeatUNet
 from fun.interp_unet import InterpolatingUNet
 from fun.multi_res_batch_sampler import MultiResolutionBatchSampler
 
@@ -77,7 +77,7 @@ def main() -> None:
     argparser.add_argument("--data-parallel", action="store_true")
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed"], required=True)
-    argparser.add_argument("--model", choices=["classic", "interp", "fno"], required=True)
+    argparser.add_argument("--model", choices=["classic", "interp", "fno", "heat"], required=True)
     argparser.add_argument("--batch-size", type=int, default=32)
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
@@ -399,6 +399,8 @@ def main() -> None:
             model = InterpolatingUNet(1, 1, base_input_size=128, max_scale_factor=8).to(args.device)
         case "fno":
             model = FNOUNet(1, 1).to(args.device)
+        case "heat":
+            model = HeatUNet(1).to(args.device)
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     if args.data_parallel:
