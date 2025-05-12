@@ -77,7 +77,7 @@ def main() -> None:
     argparser.add_argument("--data-parallel", action="store_true")
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed"], required=True)
-    argparser.add_argument("--model", choices=["classic", "interp", "fno", "heat"], required=True)
+    argparser.add_argument("--model", choices=["classic", "interp", "fno", "heat", 'classicdiff', 'diff', 'jump'], required=True)
     argparser.add_argument("--batch-size", type=int, default=32)
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
@@ -402,6 +402,12 @@ def main() -> None:
             model = FNOUNet(1, 1).to(args.device)
         case "heat":
             model = HeatUNet(1).to(args.device)
+        case "classicdiff":
+            model = DiffUNet(1, 1, zero_mean = False).to(args.device)
+        case "diff":
+            model = DiffUNet(1, 1).to(args.device)
+        case "jump":
+            model = DiffUNet(1, 1, scale = False).to(args.device)
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     if args.data_parallel:
