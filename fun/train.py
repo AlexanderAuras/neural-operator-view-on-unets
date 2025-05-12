@@ -431,8 +431,10 @@ def main() -> None:
     logger.info("Saving initial weights")
     logger.debug(f"    Path: {out_dir / 'weights' / 'initial.pt'}")
     [logger.debug(f"    Path: {out_dir / 'weights' / f'best-{name}'}") for name in val_dataloaders.keys()]
+    logger.debug(f"    Path: {out_dir / 'weights' / 'best-all'}")
     torch.save(model.state_dict(), out_dir / "weights" / "initial.pt")
     [torch.save(model.state_dict(), out_dir / "weights" / f"best-{name}.pt") for name in val_dataloaders.keys()]
+    torch.save(model.state_dict(), out_dir / "weights" / "best-all.pt")
     best_val_losses = {name: float("inf") for name in val_dataloaders.keys()}
 
     # Initial validation before training
@@ -497,6 +499,7 @@ def main() -> None:
 
             # Validate model
             model.eval()
+            all_val_loss = 0.0
             for name, dataloader in tqdm(val_dataloaders.items(), desc="Validation", unit="dataset", position=1, leave=False):
                 val_loss = 0.0
                 for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=2, leave=False):
@@ -522,6 +525,7 @@ def main() -> None:
                             tb_logger.add_image(f"val/{name}-target-{j}", normalized(target[j]), global_step=epoch + 1)
                             tb_logger.add_image(f"val/{name}-prediction-{j}", normalized(prediction[j]), global_step=epoch + 1)
                 val_loss /= len(dataloader)
+                all_val_loss += val_loss
                 if val_loss < best_val_losses[name]:
                     logger.info(f"Saving new best weights on {name}")
                     logger.debug(f"    Path: {out_dir / 'weights' / f'best-{name}.pt'}")
@@ -531,7 +535,18 @@ def main() -> None:
                     file.write(f"{epoch + 1}, {val_loss}, {datetime.datetime.now().isoformat()}\n")
                 tb_logger.add_scalar(f"val/{name}-loss", val_loss, global_step=epoch + 1)
                 lr_scheduler.step()
-                logger.info(f"Epoch {epoch + 1}: Val-Loss = {val_loss:.3e}")
+                logger.info(f"Epoch {epoch + 1}: {name} val. loss = {val_loss:.3e}")
+            all_val_loss /= len(val_dataloaders)
+            if all_val_loss < best_val_losses["all"]:
+                logger.info("Saving new best weights on all datasets")
+                logger.debug(f"    Path: {out_dir / 'weights' / 'best-all.pt'}")
+                best_val_losses["all"] = all_val_loss
+                torch.save(model.state_dict(), out_dir / "weights" / "best-all.pt")
+            with out_dir.joinpath("val-loss-all.csv").open("a") as file:
+                file.write(f"{epoch + 1}, {all_val_loss}, {datetime.datetime.now().isoformat()}\n")
+            tb_logger.add_scalar("val/avg-all-loss", all_val_loss, global_step=epoch + 1)
+            lr_scheduler.step()
+            logger.info(f"Epoch {epoch + 1}: Avg. val. loss = {all_val_loss:.3e}")
 
             # Save model
             if (epoch + 1) % args.model_save_freq == 0:
@@ -555,13 +570,14 @@ def main() -> None:
 
     # Test model and log test performance
     logger.info("Testing model")
+    model.load_state_dict(torch.load(out_dir / "weights" / "best-all.pt"))
     model.eval()
     with out_dir.joinpath("test-results.csv").open("w") as file:
         file.write("dataset, metric, value\n")
     out_dir.joinpath("test-imgs").mkdir(parents=True)
+    all_test_loss = 0.0
     for name, dataloader in tqdm(test_dataloaders.items(), desc="Testing", unit="dataset", position=0, leave=True):
         test_loss = 0.0
-        model.load_state_dict(torch.load(out_dir / "weights" / f"best-{name}.pt"))
         for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
             input_ = sample["input"].to(args.device)
             target = sample["target"].to(args.device)
@@ -582,10 +598,17 @@ def main() -> None:
                     tb_logger.add_image(f"test/{name}-target-{j}", normalized(target[j]), global_step=0)
                     tb_logger.add_image(f"test/{name}-prediction-{j}", normalized(prediction[j]), global_step=0)
         test_loss /= len(dataloader)
-        logger.info(f'Final Test-Loss on "{name}": {test_loss:.3e}')
+        all_test_loss += test_loss
+        logger.info(f'Final test loss on "{name}": {test_loss:.3e}')
         with out_dir.joinpath("test-results.csv").open("a") as file:
             file.write(f"{name}, loss, {test_loss}\n")
         tb_logger.add_scalar(f"test/{name}-loss", test_loss, global_step=0)
+    all_test_loss /= len(test_dataloaders)
+    with out_dir.joinpath("test-results.csv").open("a") as file:
+        file.write(f"all-avg, loss, {all_test_loss}\n")
+    tb_logger.add_scalar("test/avg-all-loss", all_test_loss, global_step=0)
+    lr_scheduler.step()
+    logger.info(f"Final avg. test loss on all datasets: {all_test_loss:.3e}")
 
     # Cleanup
     logger.info("Cleaning up")
