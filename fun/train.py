@@ -442,7 +442,7 @@ def main() -> None:
     torch.save(model.state_dict(), out_dir / "weights" / "initial.pt")
     [torch.save(model.state_dict(), out_dir / "weights" / f"best-{name}.pt") for name in val_dataloaders.keys()]
     torch.save(model.state_dict(), out_dir / "weights" / "best-all.pt")
-    best_val_losses = {name: float("inf") for name in val_dataloaders.keys()}
+    best_val_losses = {**{name: float("inf") for name in val_dataloaders.keys()}, "all": float("inf")}
 
     # Initial validation before training
     model.eval()
