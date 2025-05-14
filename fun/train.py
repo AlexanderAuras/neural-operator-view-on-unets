@@ -84,6 +84,7 @@ def main() -> None:
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed"], required=True)
     argparser.add_argument("--model", choices=["classic", "interp", "fno", "heat", "classicdiff", "diff", "jump"], required=True)
     argparser.add_argument("--weights", type=Path, default=None)
+    argparser.add_argument("--test-only", action="store_true")
     argparser.add_argument("--batch-size", type=int, default=32)
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
@@ -367,135 +368,136 @@ def main() -> None:
     best_val_losses = {**{name: float("inf") for name in val_dataloaders.keys()}, "all": float("inf")}
 
     # Initial validation before training
-    model.eval()
-    logger.info("Performing initial validation")
-    for name, dataloader in tqdm(val_dataloaders.items(), desc="Validation", unit="dataset", position=0, leave=False):
-        val_loss = 0.0
-        for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
-            input_ = sample["input"].to(args.device)
-            target = sample["target"].to(args.device)
-            prediction = fwd_func(input_)
-            val_loss += loss_function(prediction, target).item()
-            if i == 0:
-                for j in range(min(4, input_.shape[0])):
-                    out_dir.joinpath("val-imgs", f"{name}-input-{j}").mkdir(parents=True, exist_ok=True)
-                    out_dir.joinpath("val-imgs", f"{name}-target-{j}").mkdir(parents=True, exist_ok=True)
-                    out_dir.joinpath("val-imgs", f"{name}-prediction-{j}").mkdir(parents=True, exist_ok=True)
-                    np.save(out_dir / "val-imgs" / f"{name}-input-{j}" / "step-0.npy", input_[j].cpu().detach().numpy())
-                    np.save(out_dir / "val-imgs" / f"{name}-target-{j}" / "step-0.npy", target[j].cpu().detach().numpy())
-                    np.save(out_dir / "val-imgs" / f"{name}-prediction-{j}" / "step-0.npy", prediction[j].cpu().detach().numpy())
-                    filename = out_dir / "val-imgs" / f"{name}-input-{j}" / "step-0.png"
-                    Image.fromarray((normalized(input_[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                    filename = out_dir / "val-imgs" / f"{name}-target-{j}" / "step-0.png"
-                    Image.fromarray((normalized(target[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                    filename = out_dir / "val-imgs" / f"{name}-prediction-{j}" / "step-0.png"
-                    Image.fromarray((normalized(prediction[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                    tb_logger.add_image(f"val/{name}-input-{j}", normalized(input_[j]), global_step=0)
-                    tb_logger.add_image(f"val/{name}-target-{j}", normalized(target[j]), global_step=0)
-                    tb_logger.add_image(f"val/{name}-prediction-{j}", normalized(prediction[j]), global_step=0)
-        val_loss /= len(dataloader)
-        best_val_losses[name] = val_loss
-        with out_dir.joinpath(f"val-loss-{name}.csv").open("w") as file:
-            file.write("step, loss, time\n")
-            file.write(f"0, {val_loss}, {datetime.datetime.now().isoformat()}\n")
-        tb_logger.add_scalar(f"val/{name}-loss", val_loss, global_step=0)
-
-    # Main training loop
-    logger.info("Starting training loop")
-    with out_dir.joinpath("train-loss.csv").open("w") as file:
-        file.write("step, loss, time\n")
-    try:
-        epoch = 0
-        epochs_iter = trange(args.max_epochs, desc="Epochs", unit="epoch", position=0, leave=False)
-        for epoch in epochs_iter:
-            # Train one epoch
-            model.train()
-            batches_iter = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc="Training", unit="batch", position=1, leave=False)
-            for batch_no, sample in batches_iter:
+    if not args.test_only:
+        model.eval()
+        logger.info("Performing initial validation")
+        for name, dataloader in tqdm(val_dataloaders.items(), desc="Validation", unit="dataset", position=0, leave=False):
+            val_loss = 0.0
+            for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
                 input_ = sample["input"].to(args.device)
                 target = sample["target"].to(args.device)
-                with torch.enable_grad():
-                    prediction = fwd_func(input_)
-                    loss = loss_function(prediction, target)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                with out_dir.joinpath("train-loss.csv").open("a") as file:
-                    file.write(f"{epoch * len(train_dataloader) + batch_no}, {loss.item()}, {datetime.datetime.now().isoformat()}\n")
-                tb_logger.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + batch_no)
-                batches_iter.set_postfix({"Train-Loss": loss.item()})
-            batches_iter.close()
+                prediction = fwd_func(input_)
+                val_loss += loss_function(prediction, target).item()
+                if i == 0:
+                    for j in range(min(4, input_.shape[0])):
+                        out_dir.joinpath("val-imgs", f"{name}-input-{j}").mkdir(parents=True, exist_ok=True)
+                        out_dir.joinpath("val-imgs", f"{name}-target-{j}").mkdir(parents=True, exist_ok=True)
+                        out_dir.joinpath("val-imgs", f"{name}-prediction-{j}").mkdir(parents=True, exist_ok=True)
+                        np.save(out_dir / "val-imgs" / f"{name}-input-{j}" / "step-0.npy", input_[j].cpu().detach().numpy())
+                        np.save(out_dir / "val-imgs" / f"{name}-target-{j}" / "step-0.npy", target[j].cpu().detach().numpy())
+                        np.save(out_dir / "val-imgs" / f"{name}-prediction-{j}" / "step-0.npy", prediction[j].cpu().detach().numpy())
+                        filename = out_dir / "val-imgs" / f"{name}-input-{j}" / "step-0.png"
+                        Image.fromarray((normalized(input_[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                        filename = out_dir / "val-imgs" / f"{name}-target-{j}" / "step-0.png"
+                        Image.fromarray((normalized(target[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                        filename = out_dir / "val-imgs" / f"{name}-prediction-{j}" / "step-0.png"
+                        Image.fromarray((normalized(prediction[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                        tb_logger.add_image(f"val/{name}-input-{j}", normalized(input_[j]), global_step=0)
+                        tb_logger.add_image(f"val/{name}-target-{j}", normalized(target[j]), global_step=0)
+                        tb_logger.add_image(f"val/{name}-prediction-{j}", normalized(prediction[j]), global_step=0)
+            val_loss /= len(dataloader)
+            best_val_losses[name] = val_loss
+            with out_dir.joinpath(f"val-loss-{name}.csv").open("w") as file:
+                file.write("step, loss, time\n")
+                file.write(f"0, {val_loss}, {datetime.datetime.now().isoformat()}\n")
+            tb_logger.add_scalar(f"val/{name}-loss", val_loss, global_step=0)
 
-            # Validate model
-            model.eval()
-            all_val_loss = 0.0
-            for name, dataloader in tqdm(val_dataloaders.items(), desc="Validation", unit="dataset", position=1, leave=False):
-                val_loss = 0.0
-                for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=2, leave=False):
+        # Main training loop
+        logger.info("Starting training loop")
+        with out_dir.joinpath("train-loss.csv").open("w") as file:
+            file.write("step, loss, time\n")
+        try:
+            epoch = 0
+            epochs_iter = trange(args.max_epochs, desc="Epochs", unit="epoch", position=0, leave=False)
+            for epoch in epochs_iter:
+                # Train one epoch
+                model.train()
+                batches_iter = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc="Training", unit="batch", position=1, leave=False)
+                for batch_no, sample in batches_iter:
                     input_ = sample["input"].to(args.device)
                     target = sample["target"].to(args.device)
-                    prediction = fwd_func(input_)
-                    val_loss += loss_function(prediction, target).item()
-                    if i == 0:
-                        for j in range(min(4, input_.shape[0])):
-                            out_dir.joinpath("val-imgs", f"{name}-input-{j}").mkdir(parents=True, exist_ok=True)
-                            out_dir.joinpath("val-imgs", f"{name}-target-{j}").mkdir(parents=True, exist_ok=True)
-                            out_dir.joinpath("val-imgs", f"{name}-prediction-{j}").mkdir(parents=True, exist_ok=True)
-                            np.save(out_dir / "val-imgs" / f"{name}-input-{j}" / f"step-{epoch + 1}.npy", input_[j].cpu().detach().numpy())
-                            np.save(out_dir / "val-imgs" / f"{name}-target-{j}" / f"step-{epoch + 1}.npy", target[j].cpu().detach().numpy())
-                            np.save(out_dir / "val-imgs" / f"{name}-prediction-{j}" / f"step-{epoch + 1}.npy", prediction[j].cpu().detach().numpy())
-                            filename = out_dir / "val-imgs" / f"{name}-input-{j}" / f"step-{epoch + 1}.png"
-                            Image.fromarray((normalized(input_[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                            filename = out_dir / "val-imgs" / f"{name}-target-{j}" / f"step-{epoch + 1}.png"
-                            Image.fromarray((normalized(target[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                            filename = out_dir / "val-imgs" / f"{name}-prediction-{j}" / f"step-{epoch + 1}.png"
-                            Image.fromarray((normalized(prediction[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                            tb_logger.add_image(f"val/{name}-input-{j}", normalized(input_[j]), global_step=epoch + 1)
-                            tb_logger.add_image(f"val/{name}-target-{j}", normalized(target[j]), global_step=epoch + 1)
-                            tb_logger.add_image(f"val/{name}-prediction-{j}", normalized(prediction[j]), global_step=epoch + 1)
-                val_loss /= len(dataloader)
-                all_val_loss += val_loss
-                if val_loss < best_val_losses[name]:
-                    logger.info(f"Saving new best weights on {name}")
-                    logger.debug(f"    Path: {out_dir / 'weights' / f'best-{name}.pt'}")
-                    best_val_losses[name] = val_loss
-                    torch.save(model.state_dict(), out_dir / "weights" / f"best-{name}.pt")
-                with out_dir.joinpath(f"val-loss-{name}.csv").open("a") as file:
-                    file.write(f"{epoch + 1}, {val_loss}, {datetime.datetime.now().isoformat()}\n")
-                tb_logger.add_scalar(f"val/{name}-loss", val_loss, global_step=epoch + 1)
+                    with torch.enable_grad():
+                        prediction = fwd_func(input_)
+                        loss = loss_function(prediction, target)
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    with out_dir.joinpath("train-loss.csv").open("a") as file:
+                        file.write(f"{epoch * len(train_dataloader) + batch_no}, {loss.item()}, {datetime.datetime.now().isoformat()}\n")
+                    tb_logger.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + batch_no)
+                    batches_iter.set_postfix({"Train-Loss": loss.item()})
+                batches_iter.close()
+
+                # Validate model
+                model.eval()
+                all_val_loss = 0.0
+                for name, dataloader in tqdm(val_dataloaders.items(), desc="Validation", unit="dataset", position=1, leave=False):
+                    val_loss = 0.0
+                    for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=2, leave=False):
+                        input_ = sample["input"].to(args.device)
+                        target = sample["target"].to(args.device)
+                        prediction = fwd_func(input_)
+                        val_loss += loss_function(prediction, target).item()
+                        if i == 0:
+                            for j in range(min(4, input_.shape[0])):
+                                out_dir.joinpath("val-imgs", f"{name}-input-{j}").mkdir(parents=True, exist_ok=True)
+                                out_dir.joinpath("val-imgs", f"{name}-target-{j}").mkdir(parents=True, exist_ok=True)
+                                out_dir.joinpath("val-imgs", f"{name}-prediction-{j}").mkdir(parents=True, exist_ok=True)
+                                np.save(out_dir / "val-imgs" / f"{name}-input-{j}" / f"step-{epoch + 1}.npy", input_[j].cpu().detach().numpy())
+                                np.save(out_dir / "val-imgs" / f"{name}-target-{j}" / f"step-{epoch + 1}.npy", target[j].cpu().detach().numpy())
+                                np.save(out_dir / "val-imgs" / f"{name}-prediction-{j}" / f"step-{epoch + 1}.npy", prediction[j].cpu().detach().numpy())
+                                filename = out_dir / "val-imgs" / f"{name}-input-{j}" / f"step-{epoch + 1}.png"
+                                Image.fromarray((normalized(input_[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                                filename = out_dir / "val-imgs" / f"{name}-target-{j}" / f"step-{epoch + 1}.png"
+                                Image.fromarray((normalized(target[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                                filename = out_dir / "val-imgs" / f"{name}-prediction-{j}" / f"step-{epoch + 1}.png"
+                                Image.fromarray((normalized(prediction[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                                tb_logger.add_image(f"val/{name}-input-{j}", normalized(input_[j]), global_step=epoch + 1)
+                                tb_logger.add_image(f"val/{name}-target-{j}", normalized(target[j]), global_step=epoch + 1)
+                                tb_logger.add_image(f"val/{name}-prediction-{j}", normalized(prediction[j]), global_step=epoch + 1)
+                    val_loss /= len(dataloader)
+                    all_val_loss += val_loss
+                    if val_loss < best_val_losses[name]:
+                        logger.info(f"Saving new best weights on {name}")
+                        logger.debug(f"    Path: {out_dir / 'weights' / f'best-{name}.pt'}")
+                        best_val_losses[name] = val_loss
+                        torch.save(model.state_dict(), out_dir / "weights" / f"best-{name}.pt")
+                    with out_dir.joinpath(f"val-loss-{name}.csv").open("a") as file:
+                        file.write(f"{epoch + 1}, {val_loss}, {datetime.datetime.now().isoformat()}\n")
+                    tb_logger.add_scalar(f"val/{name}-loss", val_loss, global_step=epoch + 1)
+                    lr_scheduler.step()
+                    logger.info(f"Epoch {epoch + 1}: {name} val. loss = {val_loss:.3e}")
+                all_val_loss /= len(val_dataloaders)
+                if all_val_loss < best_val_losses["all"]:
+                    logger.info("Saving new best weights on all datasets")
+                    logger.debug(f"    Path: {out_dir / 'weights' / 'best-all.pt'}")
+                    best_val_losses["all"] = all_val_loss
+                    torch.save(model.state_dict(), out_dir / "weights" / "best-all.pt")
+                with out_dir.joinpath("val-loss-all.csv").open("a") as file:
+                    file.write(f"{epoch + 1}, {all_val_loss}, {datetime.datetime.now().isoformat()}\n")
+                tb_logger.add_scalar("val/avg-all-loss", all_val_loss, global_step=epoch + 1)
                 lr_scheduler.step()
-                logger.info(f"Epoch {epoch + 1}: {name} val. loss = {val_loss:.3e}")
-            all_val_loss /= len(val_dataloaders)
-            if all_val_loss < best_val_losses["all"]:
-                logger.info("Saving new best weights on all datasets")
-                logger.debug(f"    Path: {out_dir / 'weights' / 'best-all.pt'}")
-                best_val_losses["all"] = all_val_loss
-                torch.save(model.state_dict(), out_dir / "weights" / "best-all.pt")
-            with out_dir.joinpath("val-loss-all.csv").open("a") as file:
-                file.write(f"{epoch + 1}, {all_val_loss}, {datetime.datetime.now().isoformat()}\n")
-            tb_logger.add_scalar("val/avg-all-loss", all_val_loss, global_step=epoch + 1)
-            lr_scheduler.step()
-            logger.info(f"Epoch {epoch + 1}: Avg. val. loss = {all_val_loss:.3e}")
+                logger.info(f"Epoch {epoch + 1}: Avg. val. loss = {all_val_loss:.3e}")
 
-            # Save model
-            if (epoch + 1) % args.model_save_freq == 0:
-                logger.info("Saving weights")
-                logger.debug(f"    Path: {out_dir / 'weights' / f'epoch-{epoch + 1}.pt'}")
-                torch.save(model.state_dict(), out_dir / "weights" / f"epoch-{epoch + 1}.pt")
-        epochs_iter.close()
-    except KeyboardInterrupt:
-        pass
-    logger.info("Training completed")
+                # Save model
+                if (epoch + 1) % args.model_save_freq == 0:
+                    logger.info("Saving weights")
+                    logger.debug(f"    Path: {out_dir / 'weights' / f'epoch-{epoch + 1}.pt'}")
+                    torch.save(model.state_dict(), out_dir / "weights" / f"epoch-{epoch + 1}.pt")
+            epochs_iter.close()
+        except KeyboardInterrupt:
+            pass
+        logger.info("Training completed")
 
-    # Save model after training
-    logger.info("Saving final weights")
-    logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
-    torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
-    logger.info("Exporting weights to ONNX")
-    logger.debug(f"    Path: {out_dir / 'model.onnx'}")
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning, message=r"Converting a tensor to a Python boolean might cause the trace to be incorrect.*")
-        torch.onnx.export(model, (torch.randn((1, *exemplary_image_shape), device=args.device),), str(out_dir / "model.onnx"))
+        # Save model after training
+        logger.info("Saving final weights")
+        logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
+        torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
+        logger.info("Exporting weights to ONNX")
+        logger.debug(f"    Path: {out_dir / 'model.onnx'}")
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, message=r"Converting a tensor to a Python boolean might cause the trace to be incorrect.*")
+            torch.onnx.export(model, (torch.randn((1, *exemplary_image_shape), device=args.device),), str(out_dir / "model.onnx"))
 
     # Test model and log test performance
     logger.info("Testing model")
@@ -536,7 +538,6 @@ def main() -> None:
     with out_dir.joinpath("test-results.csv").open("a") as file:
         file.write(f"all-avg, loss, {all_test_loss}\n")
     tb_logger.add_scalar("test/avg-all-loss", all_test_loss, global_step=0)
-    lr_scheduler.step()
     logger.info(f"Final avg. test loss on all datasets: {all_test_loss:.3e}")
 
     # Cleanup

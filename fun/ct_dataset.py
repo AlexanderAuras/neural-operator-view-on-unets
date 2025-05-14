@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sized
 from pathlib import Path
-from typing import Literal, Self, cast
+from typing import Any, Literal, Self, cast
 
 import h5py
 import torch
@@ -45,19 +45,19 @@ class CTPostProcessDataset(Dataset[dict[str, Tensor]]):
     def __len__(self) -> int:
         if self.__file is not None:
             with h5py.File(self.__file) as hdf_file:
-                return len(hdf_file)
+                return len(hdf_file) // 2
         return len(cast(Sized, self.__image_dataset))
 
     @override
     def __getitem__(self, index: int) -> dict[str, Tensor]:
         if index < 0:
             raise IndexError()
-        if index >= len(cast(Sized, self.__image_dataset)):
+        if index >= len(self):
             raise StopIteration()
         if self.__file is not None:
             with h5py.File(self.__file) as hdf_file:
-                input_ = hdf_file[f"input-{index}"]
-                target = hdf_file[f"target-{index}"]
+                input_ = cast(Any, hdf_file[f"input-{index}"])[:]
+                target = cast(Any, hdf_file[f"target-{index}"])[:]
             return {"input": torch.from_numpy(input_), "target": torch.from_numpy(target)}
         groundtruth = self.__image_dataset[index]["input"]
         measurement = cast(Tensor, Radon.apply(groundtruth[None].to(self.__radon_device), self.__pos_count, self.__angles))[0].cpu()
