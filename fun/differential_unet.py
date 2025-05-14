@@ -3,32 +3,40 @@ import warnings
 
 import torch
 from torch import Tensor, nn
+import torch.nn.functional as F
 from typing_extensions import override
 
-import torch.nn.functional as F
 
 ## Adapted from: https://github.com/neuraloperator/neuraloperator/blob/main/neuralop/layers/differential_conv.py#L86
 class DiffConv2d(nn.Module):
     def __init__(
         self,
-        in_channels, out_channels, kernel_size, zero_mean = False, scale = False):
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        zero_mean: bool = False,
+        scale: bool = False,
+    ) -> None:
         super().__init__()
         self.zero_mean = zero_mean
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size = kernel_size, bias = False, padding=1)
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, bias=False, padding=1)
         self.weight = self.conv.weight
         self.scale = scale
-    def forward(self, x):
+
+    @override
+    def forward(self, x: Tensor) -> Tensor:
         if self.zero_mean:
             if self.scale:
-                grid_width = 256/x.shape[-1]
+                grid_width = 256 / x.shape[-1]
             else:
                 grid_width = 1
             conv = self.conv(x)
-            conv_sum = torch.mean(self.weight, dim=(-2,-1), keepdim=True)
+            conv_sum = torch.mean(self.weight, dim=(-2, -1), keepdim=True)
             conv_sum = F.conv2d(x, conv_sum)
             return (conv - conv_sum) / grid_width
-        else: 
+        else:
             return self.conv(x)
+
 
 class DiffUNet(nn.Module):
     """
@@ -38,20 +46,12 @@ class DiffUNet(nn.Module):
 
      Reference for differential layers
         ----------
-        .. [1] : Liu-Schiaffini, M., et al. (2024). "Neural Operators with 
-            Localized Integral and Differential Kernels". 
+        .. [1] : Liu-Schiaffini, M., et al. (2024). "Neural Operators with
+            Localized Integral and Differential Kernels".
             ICML 2024, https://arxiv.org/abs/2402.16845.
     """
 
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        depth: int = 4,
-        base_channels: int = 64,
-        zero_mean = True,
-        scale = True
-    ) -> None:
+    def __init__(self, in_channels: int, out_channels: int, depth: int = 4, base_channels: int = 64, zero_mean: bool = True, scale: bool = True) -> None:
         """
         Args:
             in_channels: The amount of channels of the input tensor.
@@ -63,18 +63,18 @@ class DiffUNet(nn.Module):
         self.__down_blocks = nn.ModuleList(
             [
                 nn.Sequential(
-                    DiffConv2d(in_channels, base_channels, kernel_size=3, zero_mean = zero_mean, scale = scale),
+                    DiffConv2d(in_channels, base_channels, kernel_size=3, zero_mean=zero_mean, scale=scale),
                     nn.ReLU(),
-                    DiffConv2d(base_channels, base_channels, kernel_size=3, zero_mean = zero_mean, scale = scale),
+                    DiffConv2d(base_channels, base_channels, kernel_size=3, zero_mean=zero_mean, scale=scale),
                     nn.ReLU(),
                 )
             ]
             + [
                 nn.Sequential(
                     nn.MaxPool2d(2),
-                    DiffConv2d(base_channels * 2 ** (i - 1), base_channels * 2**i, kernel_size=3, zero_mean = zero_mean, scale = scale),
+                    DiffConv2d(base_channels * 2 ** (i - 1), base_channels * 2**i, kernel_size=3, zero_mean=zero_mean, scale=scale),
                     nn.ReLU(),
-                    DiffConv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, zero_mean = zero_mean, scale = scale),
+                    DiffConv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, zero_mean=zero_mean, scale=scale),
                     nn.ReLU(),
                 )
                 for i in range(1, depth)
@@ -82,18 +82,18 @@ class DiffUNet(nn.Module):
         )
         self.__central_block = nn.Sequential(
             nn.MaxPool2d(2),
-            DiffConv2d(base_channels * 2 ** (depth - 1), base_channels * 2**depth, kernel_size=3, zero_mean = zero_mean, scale = scale),
+            DiffConv2d(base_channels * 2 ** (depth - 1), base_channels * 2**depth, kernel_size=3, zero_mean=zero_mean, scale=scale),
             nn.ReLU(),
-            DiffConv2d(base_channels * 2**depth, base_channels * 2**depth, kernel_size=3, zero_mean = zero_mean, scale = scale),
+            DiffConv2d(base_channels * 2**depth, base_channels * 2**depth, kernel_size=3, zero_mean=zero_mean, scale=scale),
             nn.ReLU(),
             nn.ConvTranspose2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=2, stride=2),
         )
         self.__up_blocks = nn.ModuleList(
             [
                 nn.Sequential(
-                    DiffConv2d(base_channels * 2 ** (i + 1), base_channels * 2**i, kernel_size=3, zero_mean = zero_mean, scale = scale),
+                    DiffConv2d(base_channels * 2 ** (i + 1), base_channels * 2**i, kernel_size=3, zero_mean=zero_mean, scale=scale),
                     nn.ReLU(),
-                    DiffConv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, zero_mean = zero_mean, scale = scale),
+                    DiffConv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, zero_mean=zero_mean, scale=scale),
                     nn.ReLU(),
                     nn.ConvTranspose2d(base_channels * 2**i, base_channels * 2 ** (i - 1), kernel_size=2, stride=2),
                 )
@@ -101,9 +101,9 @@ class DiffUNet(nn.Module):
             ]
             + [
                 nn.Sequential(
-                    DiffConv2d(base_channels * 2, base_channels, kernel_size=3, zero_mean = zero_mean, scale = scale),
+                    DiffConv2d(base_channels * 2, base_channels, kernel_size=3, zero_mean=zero_mean, scale=scale),
                     nn.ReLU(),
-                    DiffConv2d(base_channels, base_channels, kernel_size=3, zero_mean = zero_mean, scale = scale),
+                    DiffConv2d(base_channels, base_channels, kernel_size=3, zero_mean=zero_mean, scale=scale),
                     nn.ReLU(),
                     nn.Conv2d(base_channels, out_channels, kernel_size=1),
                 )
