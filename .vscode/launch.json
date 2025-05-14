@@ -30,11 +30,11 @@
             ],
             "args": [
                 "--debug",
-                "--dataset=ellipses-256x256",
-                "--model=classic",
+                "--dataset=${input:dataset}",
+                "--model=${input:model}",
                 "--batch-size=32",
                 "--max-epochs=10",
-                //"--no-compile",
+                "--no-compile",
                 "--device=cuda",
                 "--num-workers=0",
             ],
@@ -44,4 +44,30 @@
             },
         },
     ],
+    "inputs": [
+        {
+            "id": "dataset",
+            "type": "pickString",
+            "description": "Select the dataset to generate test data for",
+            "options": [
+                "ellipses-64x64",
+                "ellipses-128x128",
+                "ellipses-256x256",
+                "ellipses-mixed",
+            ],
+            "default": "ellipses-64x64",
+        },
+        {
+            "id": "model",
+            "type": "pickString",
+            "description": "Select the model to use",
+            "options": [
+                "classic",
+                "interp",
+                "fno",
+                "heat",
+            ],
+            "default": "classic",
+        }
+    ]
 }

@@ -95,7 +95,7 @@ class InterpolatingUNet(nn.Module):
             nn.ReLU(),
             # InterpolatingConvTranspose2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=2, stride=2),
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=3),
+            nn.Conv2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=3, padding="same"),
         )
         self.__up_blocks = nn.ModuleList(
             [
@@ -106,7 +106,7 @@ class InterpolatingUNet(nn.Module):
                     nn.ReLU(),
                     # InterpolatingConvTranspose2d(base_channels * 2**i, base_channels * 2 ** (i - 1), kernel_size=2, stride=2),
                     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-                    nn.Conv2d(base_channels * 2**i, base_channels * 2 ** (i - 1), kernel_size=3),
+                    nn.Conv2d(base_channels * 2**i, base_channels * 2 ** (i - 1), kernel_size=3, padding="same"),
                 )
                 for i in range(depth - 1, 0, -1)
             ]

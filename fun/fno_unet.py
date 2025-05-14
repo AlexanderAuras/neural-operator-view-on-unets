@@ -7,12 +7,15 @@ from typing_extensions import override
 
 from fun.fno_utils import SpectralConv2d_memory as SpectralConv2d
 
+
 class Residual_Layer(nn.Module):
-    def __init__(self, linear_layer, activation_function):
+    def __init__(self, linear_layer: nn.Module, activation_function: nn.Module) -> None:
         super().__init__()
         self.linear_layer = linear_layer
         self.activation_function = activation_function
-    def forward(self, x):
+
+    @override
+    def forward(self, x: Tensor) -> Tensor:
         return x + self.activation_function(self.linear_layer(x))
 
 
@@ -77,7 +80,9 @@ class FNOUNet(nn.Module):
             raise ValueError(f"Input width must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[3]}")
         if x.shape[2] < 2 ** len(self.__down_blocks):
             raise ValueError(f"Input height must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[2]}")
-        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self.__down_blocks[0])[0].weight.shape)[0]  # differs from CNN: CNN weight shape is out x in, FNO weight shape is in x out
+        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self.__down_blocks[0])[0].weight.shape)[
+            0
+        ]  # differs from CNN: CNN weight shape is out x in, FNO weight shape is in x out
         if x.shape[1] != allowed_input_channels:
             raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
         if x.shape[3] % 2 ** len(self.__down_blocks) != 0:
@@ -94,8 +99,9 @@ class FNOUNet(nn.Module):
             x = up_block(x)
         return x
 
+
 class HeatUNet(nn.Module):
-    def __init__(self, in_channels: int, depth: int = 4, base_channels=64, kbase1: int = 128, kbase2: int = 128) -> None:
+    def __init__(self, in_channels: int, depth: int = 4, base_channels: int = 64, kbase1: int = 128, kbase2: int = 128) -> None:
         super().__init__()
         self.__down_blocks = nn.ModuleList(
             [
@@ -146,19 +152,21 @@ class HeatUNet(nn.Module):
             raise ValueError(f"Input width must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[3]}")
         if x.shape[2] < 2 ** len(self.__down_blocks):
             raise ValueError(f"Input height must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[2]}")
-        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self.__down_blocks[0])[0].weight.shape)[0]  # differs from CNN: CNN weight shape is out x in, FNO weight shape is in x out
+        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self.__down_blocks[0])[0].weight.shape)[
+            0
+        ]  # differs from CNN: CNN weight shape is out x in, FNO weight shape is in x out
         if x.shape[1] != allowed_input_channels:
             raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
         if x.shape[3] % 2 ** len(self.__down_blocks) != 0:
             warnings.warn("Input width is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
         if x.shape[2] % 2 ** len(self.__down_blocks) != 0:
             warnings.warn("Input height is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
-        #tmp = []
+        # tmp = []
         for down_block in self.__down_blocks:
             x = down_block(x)
-            #tmp.append(x)
+            # tmp.append(x)
         x = self.__central_block(x)
-        for i, up_block in enumerate(self.__up_blocks):
-            #x = torch.cat([x, tmp[-(i + 1)]], dim=1)
+        for _, up_block in enumerate(self.__up_blocks):
+            # x = torch.cat([x, tmp[-(i + 1)]], dim=1)
             x = up_block(x)
         return x

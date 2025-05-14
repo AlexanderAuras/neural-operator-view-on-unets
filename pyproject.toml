@@ -23,9 +23,6 @@ dynamic = [ "classifiers" ]
 #source = ""
 #issues = ""
 
-#[project.scripts]
-#fno-unet = "fun.__main__:main"
-
 [tool.poetry.dependencies]
 torch = { version = "2.1.0", source = "torch-cuda" }
 astra-toolbox = "2.3.1"

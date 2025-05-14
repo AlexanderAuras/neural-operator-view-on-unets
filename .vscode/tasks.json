@@ -4,23 +4,67 @@
         {
             "label": "Tensorboard",
             "type": "shell",
-            "options": { 
-                "cwd": "${workspaceFolder}", 
+            "options": {
+                "cwd": "${workspaceFolder}",
                 "env": {
                     "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
                 },
             },
-            "command": "${command:python.interpreterPath} -c \"import tensorboard.main; tensorboard.main.run_main()\" --samples_per_plugin=SCALARS=10000 --logdir=${workspaceFolder}/runs",
+            "command": "${command:python.interpreterPath}",
+            "args":[
+                "-c",
+                "\"import tensorboard.main; tensorboard.main.run_main()\"",
+                "--samples_per_plugin=SCALARS=10000",
+                "--logdir=${workspaceFolder}/runs",
+            ],
             "problemMatcher": [],
         },
         {
             "label": "WeightVizWiz",
             "type": "shell",
-            "options": { 
+            "options": {
                 "cwd": "${workspaceFolder}",
             },
-            "command": "${command:python.interpreterPath} WeightVizWiz/wvw/__main__.py",
+            "command": "${command:python.interpreterPath}",
+            "args": [
+                "${workspaceFolder}/WeightVizWiz/wvw/__main__.py",
+            ],
             "problemMatcher": [],
+        },
+        {
+            "label": "Generate Test-Data",
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+                    "LD_LIBRARY_PATH": "${env:LD_LIBRARY_PATH}:/home/alexander/anaconda3/envs/FNO-UNet/lib/python3.11/site-packages/nvidia/cufft/lib:/home/aa609734/.conda/envs/FNO-UNet/lib/python3.11/site-packages/nvidia/cufft/lib",
+                },
+            },
+            "command": "${command:python.interpreterPath}",
+            "args": [
+                "${workspaceFolder}/fun/gen_test_data.py",
+                "${input:output_dir}",
+                "--dataset=${input:dataset}",
+            ],
+            "problemMatcher": [],
+        }
+    ],
+    "inputs": [
+        {
+            "id": "dataset",
+            "type": "pickString",
+            "description": "Select the dataset to generate test data for",
+            "options": [
+                "ellipses",
+            ],
+            "default": "ellipses",
+        },
+        {
+            "id": "output_dir",
+            "type": "promptString",
+            "description": "Select the directory to save the generated test data to",
+            "default": "${workspaceFolder}/data",
         }
     ]
 }

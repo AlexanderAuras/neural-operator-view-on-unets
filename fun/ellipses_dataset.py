@@ -52,7 +52,9 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
             sizes[torch.stack([torch.full_like(tmp, False), tmp], dim=-1)] = (1.0 - self.__max_excentricity**2) ** 0.5 * sizes[tmp][:, 0]
         positions = torch.rand((1, 1, self.__ellipses_per_image, 2), generator=generator)
         angles = torch.pi * torch.rand((1, 1, self.__ellipses_per_image), generator=generator)
-        intensities = self.__ellipse_intensities[0] + (self.__ellipse_intensities[1] - self.__ellipse_intensities[0]) * torch.rand((1, 1, self.__ellipses_per_image), generator=generator)
+        intensities = self.__ellipse_intensities[0] + (self.__ellipse_intensities[1] - self.__ellipse_intensities[0]) * torch.rand(
+            (1, 1, self.__ellipses_per_image), generator=generator
+        )
         coords = torch.stack(torch.meshgrid(torch.linspace(0.0, 1.0, self.__image_size[1]), torch.linspace(0.0, 1.0, self.__image_size[0]), indexing="xy"), dim=-1)[:, :, None]
         distances = 1 / sizes[..., 0] * (torch.cos(angles) * (coords[..., 0] - positions[..., 0]) + torch.sin(angles) * (coords[..., 1] - positions[..., 1])) ** 2
         distances += 1 / sizes[..., 1] * (torch.cos(angles) * (coords[..., 1] - positions[..., 1]) - torch.sin(angles) * (coords[..., 0] - positions[..., 0])) ** 2

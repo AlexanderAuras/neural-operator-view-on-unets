@@ -15,21 +15,24 @@ class Radon(torch.autograd.Function):
         ctx.save_for_backward(angles)
         img_geom_conf = astra.create_vol_geom(img.shape[-1], img.shape[-2], -img.shape[-2] / 2, img.shape[-2] / 2, -img.shape[-1] / 2, img.shape[-1] / 2)
         # img_geom_conf = astra.create_vol_geom(img.shape[-1], img.shape[-2], -0.5, 0.5, -0.5, 0.5)
-        proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img.shape[-1] ** 2 + img.shape[-2] ** 2) / det_count, det_count, angles.detach().to("cpu").numpy())
-        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().to("cpu").numpy())
+        proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img.shape[-1] ** 2 + img.shape[-2] ** 2) / det_count, det_count, angles.detach().cpu().numpy())
+        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().cpu().numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
-        algo_conf = astra.astra_dict("FP_CUDA")
+        proj_id = astra.create_projector("cuda" if "cuda" in str(img.device) else "line", proj_geom_conf, img_geom_conf)
+        algo_conf = astra.astra_dict("FP_CUDA" if "cuda" in str(img.device) else "FP")
         algo_conf["VolumeDataId"] = img_data_id
         algo_conf["ProjectionDataId"] = sino_data_id
+        algo_conf["ProjectorId"] = proj_id
         algo_id = astra.algorithm.create(algo_conf)
         flat_batch_img = img.flatten(end_dim=-3)
         flat_batch_sino = torch.zeros((flat_batch_img.shape[0], angles.shape[0], det_count), dtype=img.dtype, device=img.device)
         for i in range(flat_batch_img.shape[0]):
-            astra.data2d.store(img_data_id, flat_batch_img[i].detach().to("cpu").numpy())
+            astra.data2d.store(img_data_id, flat_batch_img[i].detach().cpu().numpy())
             astra.algorithm.run(algo_id)
             flat_batch_sino[i] = torch.from_numpy(astra.data2d.get(sino_data_id)).to(img.device)
         astra.algorithm.delete(algo_id)
+        astra.projector.delete(proj_id)
         astra.data2d.delete(sino_data_id)
         astra.data2d.delete(img_data_id)
         return flat_batch_sino.reshape(*img.shape[:-2], *flat_batch_sino.shape[-2:])
@@ -43,12 +46,12 @@ class Radon(torch.autograd.Function):
         sino = grad_outputs[0]
         img_geom_conf = astra.create_vol_geom(img_shape[-1], img_shape[-2], -img_shape[-2] / 2, img_shape[-2] / 2, -img_shape[-1] / 2, img_shape[-1] / 2)
         # img_geom_conf = astra.create_vol_geom(img_shape[-1], img_shape[-2], -0.5, 0.5, -0.5, 0.5)
-        proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img_shape[-1] ** 2 + img_shape[-2] ** 2) / det_count, det_count, angles.detach().to("cpu").numpy())
-        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().to("cpu").numpy())
+        proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img_shape[-1] ** 2 + img_shape[-2] ** 2) / det_count, det_count, angles.detach().cpu().numpy())
+        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().cpu().numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
-        proj_id = astra.create_projector("cuda", proj_geom_conf, img_geom_conf)
-        algo_conf = astra.astra_dict("BP_CUDA")
+        proj_id = astra.create_projector("cuda" if "cuda" in str(sino.device) else "line", proj_geom_conf, img_geom_conf)
+        algo_conf = astra.astra_dict("BP_CUDA" if "cuda" in str(sino.device) else "BP")
         algo_conf["ProjectorId"] = proj_id
         algo_conf["ProjectionDataId"] = sino_data_id
         algo_conf["ReconstructionDataId"] = img_data_id
@@ -56,7 +59,7 @@ class Radon(torch.autograd.Function):
         flat_batch_sino = sino.flatten(end_dim=-3)
         flat_batch_img = torch.zeros((flat_batch_sino.shape[0], *img_shape[-2:]), dtype=sino.dtype, device=sino.device)
         for i in range(flat_batch_img.shape[0]):
-            astra.data2d.store(sino_data_id, flat_batch_sino[i].detach().to("cpu").numpy())
+            astra.data2d.store(sino_data_id, flat_batch_sino[i].detach().cpu().numpy())
             astra.algorithm.run(algo_id)
             flat_batch_img[i] = torch.from_numpy(astra.data2d.get(img_data_id)).to(sino.device)
         astra.algorithm.delete(algo_id)
@@ -74,12 +77,12 @@ class FilteredBackprojection(torch.autograd.Function):
         ctx.save_for_backward(angles)
         img_geom_conf = astra.create_vol_geom(img_shape[-1], img_shape[-2], -img_shape[-2] / 2, img_shape[-2] / 2, -img_shape[-1] / 2, img_shape[-1] / 2)
         # img_geom_conf = astra.create_vol_geom(img_shape[-1], img_shape[-2], -0.5, 0.5, -0.5, 0.5)
-        proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img_shape[-1] ** 2 + img_shape[-2] ** 2) / det_count, det_count, angles.detach().to("cpu").numpy())
-        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().to("cpu").numpy())
+        proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img_shape[-1] ** 2 + img_shape[-2] ** 2) / det_count, det_count, angles.detach().cpu().numpy())
+        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().cpu().numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
-        proj_id = astra.create_projector("cuda", proj_geom_conf, img_geom_conf)
-        algo_conf = astra.astra_dict("FBP_CUDA")
+        proj_id = astra.create_projector("cuda" if "cuda" in str(sino.device) else "line", proj_geom_conf, img_geom_conf)
+        algo_conf = astra.astra_dict("FBP_CUDA" if "cuda" in str(sino.device) else "FBP")
         algo_conf["ProjectorId"] = proj_id
         algo_conf["ProjectionDataId"] = sino_data_id
         algo_conf["ReconstructionDataId"] = img_data_id
@@ -87,7 +90,7 @@ class FilteredBackprojection(torch.autograd.Function):
         flat_batch_sino = sino.flatten(end_dim=-3)
         flat_batch_img = torch.zeros((flat_batch_sino.shape[0], *img_shape[-2:]), dtype=sino.dtype, device=sino.device)
         for i in range(flat_batch_img.shape[0]):
-            astra.data2d.store(sino_data_id, flat_batch_sino[i].detach().to("cpu").numpy())
+            astra.data2d.store(sino_data_id, flat_batch_sino[i].detach().cpu().numpy())
             astra.algorithm.run(algo_id)
             flat_batch_img[i] = torch.from_numpy(astra.data2d.get(img_data_id)).to(sino.device)
         astra.algorithm.delete(algo_id)
@@ -104,21 +107,24 @@ class FilteredBackprojection(torch.autograd.Function):
         img = grad_outputs[0]
         img_geom_conf = astra.create_vol_geom(img.shape[-1], img.shape[-2], -img.shape[-2] / 2, img.shape[-2] / 2, -img.shape[-1] / 2, img.shape[-1] / 2)
         # img_geom_conf = astra.create_vol_geom(img.shape[-1], img.shape[-2], -0.5, 0.5, -0.5, 0.5)
-        proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img.shape[-1] ** 2 + img.shape[-2] ** 2) / det_count, det_count, angles.detach().to("cpu").numpy())
-        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().to("cpu").numpy())
+        proj_geom_conf = astra.create_proj_geom("parallel", sqrt(img.shape[-1] ** 2 + img.shape[-2] ** 2) / det_count, det_count, angles.detach().cpu().numpy())
+        # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().cpu().numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
-        algo_conf = astra.astra_dict("FP_CUDA")
+        proj_id = astra.create_projector("cuda" if "cuda" in str(img.device) else "line", proj_geom_conf, img_geom_conf)
+        algo_conf = astra.astra_dict("FP_CUDA" if "cuda" in str(img.device) else "FP")
         algo_conf["VolumeDataId"] = img_data_id
         algo_conf["ProjectionDataId"] = sino_data_id
+        algo_conf["ProjectorId"] = proj_id
         algo_id = astra.algorithm.create(algo_conf)
         flat_batch_img = img.flatten(end_dim=-3)
         flat_batch_sino = torch.zeros((flat_batch_img.shape[0], angles.shape[0], det_count), dtype=img.dtype, device=img.device)
         for i in range(flat_batch_img.shape[0]):
-            astra.data2d.store(img_data_id, flat_batch_img[i].detach().to("cpu").numpy())
+            astra.data2d.store(img_data_id, flat_batch_img[i].detach().cpu().numpy())
             astra.algorithm.run(algo_id)
             flat_batch_sino[i] = torch.from_numpy(astra.data2d.get(sino_data_id)).to(img.device)
         astra.algorithm.delete(algo_id)
+        astra.projector.delete(proj_id)
         astra.data2d.delete(sino_data_id)
         astra.data2d.delete(img_data_id)
         return flat_batch_sino.reshape(*img.shape[:-2], *flat_batch_sino.shape[-2:]), None, None, None

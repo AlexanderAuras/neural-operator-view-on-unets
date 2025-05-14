@@ -34,6 +34,10 @@ from fun.interp_unet import InterpolatingUNet
 from fun.multi_res_batch_sampler import MultiResolutionBatchSampler
 
 
+BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
+BASE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+
+
 def setup_logging(logging_config_path: str | Path, out_dir: str | Path | None = None) -> None:
     try:
         logging.config.fileConfig(Path(logging_config_path).resolve())
@@ -87,7 +91,7 @@ def main() -> None:
     argparser.add_argument("--num-ellipses", type=int, default=10)
     args = argparser.parse_args()
 
-    out_dir = Path(__file__).resolve().parents[1] / "runs" / randomname.get_name()
+    out_dir = BASE_OUT_DIR / randomname.get_name()
     if args.debug:
         out_dir = out_dir.parent.joinpath("_debug")
         if out_dir.exists():
@@ -108,7 +112,7 @@ def main() -> None:
     logger.info("Saving code to archive")
     with zipfile.ZipFile(out_dir / "code.zip", "w") as code_archive:
         for file in Path(__file__).parents[1].resolve().glob("fun/**/*.py"):
-            logger.debug(f"    Adding {file} to code-archive")
+            logger.debug(f"    Adding {file}")
             code_archive.write(file, file.relative_to(Path(__file__).parents[1].resolve()))
 
     # Configure PyTorch
@@ -152,7 +156,7 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
             }
-            test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
+            """test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses, seed=83696968)
             test_datasets = {
                 "64x64": CTPostProcessDataset(
                     test_dataset,
@@ -178,6 +182,11 @@ def main() -> None:
                     noise_type="gaussian",
                     noise_level=args.noise_level,
                 ),
+            }"""
+            test_datasets = {
+                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
+                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
+                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-256x256.h5"),
             }
             exemplary_image_shape = (1, 64, 64)
         case "ellipses-128x128":
@@ -200,7 +209,7 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
             }
-            test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
+            """test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
             test_datasets = {
                 "64x64": CTPostProcessDataset(
                     test_dataset,
@@ -226,6 +235,11 @@ def main() -> None:
                     noise_type="gaussian",
                     noise_level=args.noise_level,
                 ),
+            }"""
+            test_datasets = {
+                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
+                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
+                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-256x256.h5"),
             }
             exemplary_image_shape = (1, 128, 128)
         case "ellipses-256x256":
@@ -248,7 +262,7 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
             }
-            test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
+            """test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
             test_datasets = {
                 "64x64": CTPostProcessDataset(
                     test_dataset,
@@ -274,6 +288,11 @@ def main() -> None:
                     noise_type="gaussian",
                     noise_level=args.noise_level,
                 ),
+            }"""
+            test_datasets = {
+                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
+                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
+                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-256x256.h5"),
             }
             exemplary_image_shape = (1, 256, 256)
         case "ellipses-mixed":
@@ -331,7 +350,7 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
             }
-            test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
+            """test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
             test_datasets = {
                 "64x64": CTPostProcessDataset(
                     test_dataset,
@@ -357,6 +376,11 @@ def main() -> None:
                     noise_type="gaussian",
                     noise_level=args.noise_level,
                 ),
+            }"""
+            test_datasets = {
+                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
+                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
+                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-256x256.h5"),
             }
             exemplary_image_shape = (1, 256, 256)
         case _:
@@ -397,7 +421,7 @@ def main() -> None:
         case "classic":
             model = UNet(1, 1).to(args.device)
         case "interp":
-            model = InterpolatingUNet(1, 1, base_input_size=128, max_scale_factor=8).to(args.device)
+            model = InterpolatingUNet(1, 1, base_input_size=64, max_scale_factor=4).to(args.device)
         case "fno":
             model = FNOUNet(1, 1).to(args.device)
         case "heat":
