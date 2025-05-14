@@ -83,6 +83,7 @@ def main() -> None:
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed"], required=True)
     argparser.add_argument("--model", choices=["classic", "interp", "fno", "heat", "classicdiff", "diff", "jump"], required=True)
+    argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--batch-size", type=int, default=32)
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
@@ -157,33 +158,6 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
             }
-            """test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses, seed=83696968)
-            test_datasets = {
-                "64x64": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-                    pos_count=128,
-                    target_shape=(64, 64),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-                "128x128": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-                    pos_count=256,
-                    target_shape=(128, 128),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-                "256x256": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-                    pos_count=512,
-                    target_shape=(256, 256),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-            }"""
             test_datasets = {
                 "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
                 "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
@@ -210,33 +184,6 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
             }
-            """test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
-            test_datasets = {
-                "64x64": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-                    pos_count=128,
-                    target_shape=(64, 64),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-                "128x128": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-                    pos_count=256,
-                    target_shape=(128, 128),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-                "256x256": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-                    pos_count=512,
-                    target_shape=(256, 256),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-            }"""
             test_datasets = {
                 "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
                 "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
@@ -263,33 +210,6 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
             }
-            """test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
-            test_datasets = {
-                "64x64": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-                    pos_count=128,
-                    target_shape=(64, 64),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-                "128x128": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-                    pos_count=256,
-                    target_shape=(128, 128),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-                "256x256": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-                    pos_count=512,
-                    target_shape=(256, 256),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-            }"""
             test_datasets = {
                 "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
                 "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
@@ -351,33 +271,6 @@ def main() -> None:
                     noise_level=args.noise_level,
                 ),
             }
-            """test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
-            test_datasets = {
-                "64x64": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-                    pos_count=128,
-                    target_shape=(64, 64),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-                "128x128": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-                    pos_count=256,
-                    target_shape=(128, 128),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-                "256x256": CTPostProcessDataset(
-                    test_dataset,
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-                    pos_count=512,
-                    target_shape=(256, 256),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                ),
-            }"""
             test_datasets = {
                 "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
                 "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
@@ -460,13 +353,17 @@ def main() -> None:
     logger.info("Creating tensorboard logger")
     tb_logger = torch.utils.tensorboard.writer.SummaryWriter(out_dir)
     out_dir.joinpath("weights").mkdir(parents=True)
-    logger.info("Saving initial weights")
-    logger.debug(f"    Path: {out_dir / 'weights' / 'initial.pt'}")
-    [logger.debug(f"    Path: {out_dir / 'weights' / f'best-{name}'}") for name in val_dataloaders.keys()]
-    logger.debug(f"    Path: {out_dir / 'weights' / 'best-all'}")
-    torch.save(model.state_dict(), out_dir / "weights" / "initial.pt")
-    [torch.save(model.state_dict(), out_dir / "weights" / f"best-{name}.pt") for name in val_dataloaders.keys()]
-    torch.save(model.state_dict(), out_dir / "weights" / "best-all.pt")
+    if args.weights is not None:
+        logger.info(f"Loading initial weights {args.weights}")
+        model.load_state_dict(torch.load(args.weights, map_location=args.device))
+    else:
+        logger.info("Saving initial weights")
+        logger.debug(f"    Path: {out_dir / 'weights' / 'initial.pt'}")
+        [logger.debug(f"    Path: {out_dir / 'weights' / f'best-{name}'}") for name in val_dataloaders.keys()]
+        logger.debug(f"    Path: {out_dir / 'weights' / 'best-all'}")
+        torch.save(model.state_dict(), out_dir / "weights" / "initial.pt")
+        [torch.save(model.state_dict(), out_dir / "weights" / f"best-{name}.pt") for name in val_dataloaders.keys()]
+        torch.save(model.state_dict(), out_dir / "weights" / "best-all.pt")
     best_val_losses = {**{name: float("inf") for name in val_dataloaders.keys()}, "all": float("inf")}
 
     # Initial validation before training

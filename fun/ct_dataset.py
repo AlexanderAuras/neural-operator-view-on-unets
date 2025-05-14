@@ -43,6 +43,9 @@ class CTPostProcessDataset(Dataset[dict[str, Tensor]]):
         return instance
 
     def __len__(self) -> int:
+        if self.__file is not None:
+            with h5py.File(self.__file) as hdf_file:
+                return len(hdf_file)
         return len(cast(Sized, self.__image_dataset))
 
     @override

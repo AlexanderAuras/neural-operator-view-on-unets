@@ -33,7 +33,7 @@
                 "--dataset=${input:dataset}",
                 "--model=${input:model}",
                 "--batch-size=32",
-                "--max-epochs=10",
+                "--max-epochs=0",
                 "--no-compile",
                 "--device=cuda",
                 "--num-workers=0",
