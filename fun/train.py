@@ -1,5 +1,4 @@
 import argparse
-from contextlib import redirect_stderr, redirect_stdout
 import datetime
 import logging
 import logging.config
@@ -47,7 +46,6 @@ def setup_logging(logging_config_path: str | Path, out_dir: str | Path | None = 
                 for handler in logger.handlers:
                     if isinstance(handler, logging.FileHandler):
                         handler.baseFilename = str(Path(out_dir) / Path(handler.baseFilename).name)
-                        print(handler.baseFilename)
     except ModuleNotFoundError as e:
         indent_depth = 46 + len(str(logging_config_path))
         indented_error_msg = " " * indent_depth + str(e).replace("\n", "\n" + " " * indent_depth)
@@ -101,9 +99,8 @@ def main() -> None:
             shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True)
 
-    if "SLURM_JOB_ID" in os.environ:
-        redirect_stdout(out_dir.joinpath("stdout.log").open("w")).__enter__()
-        redirect_stderr(out_dir.joinpath("stderr.log").open("w")).__enter__()
+    # redirect_stdout(out_dir.joinpath("stdout.log").open("w")).__enter__()
+    # redirect_stderr(out_dir.joinpath("stderr.log").open("w")).__enter__()
     setup_logging(Path(__file__).resolve().parents[1] / "logging.conf", out_dir)
     logger = logging.getLogger("fun.train")
     logger.info(f"{'=' * 20} {out_dir.name.upper()} {'=' * 20}")
@@ -501,7 +498,8 @@ def main() -> None:
 
     # Test model and log test performance
     logger.info("Testing model")
-    model.load_state_dict(torch.load(out_dir / "weights" / "best-all.pt"))
+    if not args.test_only:
+        model.load_state_dict(torch.load(out_dir / "weights" / "best-all.pt"))
     model.eval()
     with out_dir.joinpath("test-results.csv").open("w") as file:
         file.write("dataset, metric, value\n")
