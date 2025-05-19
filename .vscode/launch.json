@@ -29,12 +29,15 @@
                 "-O"
             ],
             "args": [
-                "--debug",
+                //"--debug",
                 "--dataset=${input:dataset}",
                 "--model=${input:model}",
                 "--batch-size=32",
-                "--max-epochs=1",
-                //"--no-compile",
+                //"--max-epochs=0",
+                //"--test-only",
+                //"--weights=runs/mixed-2.4.pt",
+                "--max-epochs=10",
+                "--no-compile",
                 "--device=cuda",
                 "--num-workers=0",
             ],

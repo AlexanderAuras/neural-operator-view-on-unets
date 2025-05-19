@@ -20,6 +20,7 @@ def main() -> None:
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--seed", type=int, default=random.randrange(0, 2**32))
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
+    argparser.add_argument("--device", type=torch.device, default=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     argparser.add_argument("--dataset", choices=["ellipses"], required=True)
     argparser.add_argument("--noise-level", type=float, default=0.0)
     argparser.add_argument("--angle-percent", type=float, default=0.75)
@@ -65,6 +66,7 @@ def main() -> None:
                     target_shape=(64, 64),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
                 "128x128": CTPostProcessDataset(
                     test_dataset,
@@ -73,6 +75,7 @@ def main() -> None:
                     target_shape=(128, 128),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
                 "256x256": CTPostProcessDataset(
                     test_dataset,
@@ -81,6 +84,7 @@ def main() -> None:
                     target_shape=(256, 256),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
             }
         case _:

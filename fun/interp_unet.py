@@ -116,7 +116,7 @@ class InterpolatingUNet(nn.Module):
                     nn.ReLU(),
                     InterpolatingConv2d(base_channels, base_channels, 3, base_input_size, max_scale_factor, padding="same"),
                     nn.ReLU(),
-                    InterpolatingConv2d(base_channels, out_channels, 1, base_input_size, max_scale_factor),
+                    InterpolatingConv2d(base_channels, out_channels, 1, base_input_size, max_scale_factor, padding="same"),
                 )
             ]
         )
