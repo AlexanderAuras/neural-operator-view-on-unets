@@ -161,6 +161,7 @@ def main() -> None:
                 target_shape=(64, 64),
                 noise_type="gaussian",
                 noise_level=args.noise_level,
+                radon_device=args.device,
             )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
@@ -171,6 +172,7 @@ def main() -> None:
                     target_shape=(64, 64),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
             }
             test_datasets = {
@@ -187,6 +189,7 @@ def main() -> None:
                 target_shape=(128, 128),
                 noise_type="gaussian",
                 noise_level=args.noise_level,
+                radon_device=args.device,
             )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
@@ -197,6 +200,7 @@ def main() -> None:
                     target_shape=(128, 128),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
             }
             test_datasets = {
@@ -213,6 +217,7 @@ def main() -> None:
                 target_shape=(256, 256),
                 noise_type="gaussian",
                 noise_level=args.noise_level,
+                radon_device=args.device,
             )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
@@ -223,6 +228,7 @@ def main() -> None:
                     target_shape=(256, 256),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
             }
             test_datasets = {
@@ -240,6 +246,7 @@ def main() -> None:
                     target_shape=(64, 64),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
                 CTPostProcessDataset(
                     EllipsesDataset(2133, 1024, args.num_ellipses),
@@ -248,6 +255,7 @@ def main() -> None:
                     target_shape=(128, 128),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
                 CTPostProcessDataset(
                     EllipsesDataset(2133, 1024, args.num_ellipses),
@@ -256,6 +264,7 @@ def main() -> None:
                     target_shape=(256, 256),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
             ]
             train_dataset = torch.utils.data.ConcatDataset(train_datasets)
@@ -268,6 +277,7 @@ def main() -> None:
                     target_shape=(64, 64),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
                 "128x128": CTPostProcessDataset(
                     EllipsesDataset(533, 1024, args.num_ellipses),
@@ -276,6 +286,7 @@ def main() -> None:
                     target_shape=(128, 128),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
                 "256x256": CTPostProcessDataset(
                     EllipsesDataset(533, 1024, args.num_ellipses),
@@ -284,6 +295,7 @@ def main() -> None:
                     target_shape=(256, 256),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
+                    radon_device=args.device,
                 ),
             }
             test_datasets = {
