@@ -317,9 +317,9 @@ def main() -> None:
                     noise_type="gaussian",
                     noise_level=args.noise_level,
                 )
-                for r in [30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300]
+                for r in range(16, 305, 16)
             }
-            exemplary_image_shape = (1, 300, 300)
+            exemplary_image_shape = (1, 304, 304)
         case _:
             raise ValueError(f'Unknown dataset: "{args.dataset}"')
     logger.info("Creating dataloaders")

@@ -1,5 +1,4 @@
 from typing import cast
-import warnings
 
 import torch
 from torch import Tensor, nn
@@ -90,9 +89,10 @@ class UNet(nn.Module):
         if x.shape[1] != allowed_input_channels:
             raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
         if x.shape[3] % 2 ** len(self.__down_blocks) != 0:
-            warnings.warn("Input width is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
-        if x.shape[2] % 2 ** len(self.__down_blocks) != 0:
-            warnings.warn("Input height is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
+            raise ValueError(
+                f"Input width is not divisible by {2 ** len(self.__down_blocks)}, got {x.shape[3]}"
+                + f" ({x.shape[3]} / {2 ** len(self.__down_blocks)} = {x.shape[3] / 2 ** len(self.__down_blocks)})."
+            )
         tmp = []
         for down_block in self.__down_blocks:
             x = down_block(x)
