@@ -1,4 +1,5 @@
 import argparse
+from contextlib import redirect_stderr, redirect_stdout
 import datetime
 import logging
 import logging.config
@@ -16,7 +17,7 @@ import numpy as np
 import PIL.Image as Image
 import randomname
 import torch
-from torch import nn
+from torch import Tensor, nn
 import torch.backends.cudnn
 import torch.utils.data
 from torch.utils.data import DataLoader
@@ -25,13 +26,14 @@ import torchinfo
 import torchview
 from tqdm.auto import tqdm, trange
 
-from fun.classical_unet import UNet
-from fun.ct_dataset import CTPostProcessDataset
-from fun.differential_unet import DiffUNet
-from fun.ellipses_dataset import EllipsesDataset
-from fun.fno_unet import FNOUNet, HeatUNet
-from fun.interp_unet import InterpolatingUNet
-from fun.multi_res_batch_sampler import MultiResolutionBatchSampler
+from fun.data.ct_dataset import CTPostProcessDataset
+from fun.data.ellipses_dataset import EllipsesDataset
+from fun.data.multi_res_batch_sampler import MultiResolutionBatchSampler
+from fun.models.classical_unet import UNet
+from fun.models.differential_unet import DiffUNet
+from fun.models.dncnn import DnCNN
+from fun.models.fno_unet import FNOUNet, HeatUNet
+from fun.models.interp_unet import InterpolatingUNet
 
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
@@ -79,8 +81,8 @@ def main() -> None:
     argparser.add_argument("--no-compile", dest="compile", action="store_false")
     argparser.add_argument("--data-parallel", action="store_true")
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
-    argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed"], required=True)
-    argparser.add_argument("--model", choices=["classic", "interp", "fno", "heat", "classicdiff", "diff", "jump"], required=True)
+    argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
+    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "fno", "heat", "classicdiff", "diff", "jump"], required=True)
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
     argparser.add_argument("--batch-size", type=int, default=32)
@@ -99,8 +101,8 @@ def main() -> None:
             shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True)
 
-    # redirect_stdout(out_dir.joinpath("stdout.log").open("w")).__enter__()
-    # redirect_stderr(out_dir.joinpath("stderr.log").open("w")).__enter__()
+    redirect_stdout(out_dir.joinpath("stdout.log").open("w")).__enter__()
+    redirect_stderr(out_dir.joinpath("stderr.log").open("w")).__enter__()
     setup_logging(Path(__file__).resolve().parents[1] / "logging.conf", out_dir)
     logger = logging.getLogger("fun.train")
     logger.info(f"{'=' * 20} {out_dir.name.upper()} {'=' * 20}")
@@ -114,6 +116,21 @@ def main() -> None:
         for file in Path(__file__).parents[1].resolve().glob("fun/**/*.py"):
             logger.debug(f"    Adding {file}")
             code_archive.write(file, file.relative_to(Path(__file__).parents[1].resolve()))
+
+    # Validate cli arguments
+    if args.debug:
+        logger.warning("Executing debug run")
+    if args.dataset == "ellipses-sweep" and not args.test_only:
+        logger.warning("Using ellipses-sweep dataset, skipping training")
+        args.test_only = True
+    if args.test_only:
+        logger.warning("Test only run, skipping training")
+        if args.weights is None:
+            logger.error("No weights provided for test only run")
+            exit(-1)
+    if args.device.type == "cuda" and not torch.cuda.is_available():
+        logger.warning("No CUDA devices available, falling back to CPU")
+        args.device = torch.device("cpu")
 
     # Configure PyTorch
     logger.info("Configuring PyTorch")
@@ -275,6 +292,22 @@ def main() -> None:
                 "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-256x256.h5"),
             }
             exemplary_image_shape = (1, 256, 256)
+        case "ellipses-sweep":
+            train_dataset = cast(torch.utils.data.Dataset[dict[str, Tensor]], [{"input": torch.empty(0), "target": torch.empty(0)}])
+            train_batch_sampler = MultiResolutionBatchSampler([1], batch_size=args.batch_size, shuffle=True, drop_incomplete=False)
+            val_datasets = {}
+            test_datasets = {
+                f"{r}x{r}": CTPostProcessDataset(
+                    EllipsesDataset(200, 1024, args.num_ellipses),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(4 * r * args.angle_percent)),
+                    pos_count=2 * r,
+                    target_shape=(r, r),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                )
+                for r in [30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300]
+            }
+            exemplary_image_shape = (1, 300, 300)
         case _:
             raise ValueError(f'Unknown dataset: "{args.dataset}"')
     logger.info("Creating dataloaders")
@@ -310,9 +343,11 @@ def main() -> None:
     # Create model and log model information
     logger.info("Creating model")
     match args.model:
-        case "classic":
+        case "unet":
             model = UNet(1, 1).to(args.device)
-        case "interp":
+        case "dncnn":
+            model = DnCNN(1).to(args.device)
+        case "unet-interp":
             model = InterpolatingUNet(1, 1, base_input_size=64, max_scale_factor=4).to(args.device)
         case "fno":
             model = FNOUNet(1, 1).to(args.device)

@@ -5,7 +5,7 @@ import torch
 from torch import Tensor, nn
 from typing_extensions import override
 
-from fun.fno_utils import SpectralConv2d_memory as SpectralConv2d
+from fun.utils.fno_utils import SpectralConv2d_memory as SpectralConv2d
 
 
 class Residual_Layer(nn.Module):
