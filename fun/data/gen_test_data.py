@@ -10,9 +10,9 @@ import numpy as np
 import torch
 import torch.backends.cudnn
 
-from fun.ct_dataset import CTPostProcessDataset
-from fun.ellipses_dataset import EllipsesDataset
-from fun.formatters import ColoringIndentingFormatter
+from fun.data.ct_dataset import CTPostProcessDataset
+from fun.data.ellipses_dataset import EllipsesDataset
+from fun.utils.formatters import ColoringIndentingFormatter
 
 
 def main() -> None:

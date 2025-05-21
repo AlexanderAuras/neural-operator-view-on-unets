@@ -19,8 +19,8 @@ class Radon(torch.autograd.Function):
         # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().cpu().numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
-        proj_id = astra.create_projector("cuda" if "cuda" in str(img.device) else "line", proj_geom_conf, img_geom_conf)
-        algo_conf = astra.astra_dict("FP_CUDA" if "cuda" in str(img.device) else "FP")
+        proj_id = astra.create_projector("cuda" if img.device.type == "cuda" else "line", proj_geom_conf, img_geom_conf)
+        algo_conf = astra.astra_dict("FP_CUDA" if img.device.type == "cuda" else "FP")
         algo_conf["VolumeDataId"] = img_data_id
         algo_conf["ProjectionDataId"] = sino_data_id
         algo_conf["ProjectorId"] = proj_id
@@ -50,8 +50,8 @@ class Radon(torch.autograd.Function):
         # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().cpu().numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
-        proj_id = astra.create_projector("cuda" if "cuda" in str(sino.device) else "line", proj_geom_conf, img_geom_conf)
-        algo_conf = astra.astra_dict("BP_CUDA" if "cuda" in str(sino.device) else "BP")
+        proj_id = astra.create_projector("cuda" if sino.device.type == "cuda" else "line", proj_geom_conf, img_geom_conf)
+        algo_conf = astra.astra_dict("BP_CUDA" if sino.device.type == "cuda" else "BP")
         algo_conf["ProjectorId"] = proj_id
         algo_conf["ProjectionDataId"] = sino_data_id
         algo_conf["ReconstructionDataId"] = img_data_id
@@ -81,8 +81,8 @@ class FilteredBackprojection(torch.autograd.Function):
         # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().cpu().numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
-        proj_id = astra.create_projector("cuda" if "cuda" in str(sino.device) else "line", proj_geom_conf, img_geom_conf)
-        algo_conf = astra.astra_dict("FBP_CUDA" if "cuda" in str(sino.device) else "FBP")
+        proj_id = astra.create_projector("cuda" if sino.device.type == "cuda" else "line", proj_geom_conf, img_geom_conf)
+        algo_conf = astra.astra_dict("FBP_CUDA" if sino.device.type == "cuda" else "FBP")
         algo_conf["ProjectorId"] = proj_id
         algo_conf["ProjectionDataId"] = sino_data_id
         algo_conf["ReconstructionDataId"] = img_data_id
@@ -111,8 +111,8 @@ class FilteredBackprojection(torch.autograd.Function):
         # proj_geom_conf = astra.create_proj_geom("parallel", sqrt(2) / det_count, det_count, angles.detach().cpu().numpy())
         img_data_id = astra.data2d.create("-vol", img_geom_conf)
         sino_data_id = astra.data2d.create("-sino", proj_geom_conf)
-        proj_id = astra.create_projector("cuda" if "cuda" in str(img.device) else "line", proj_geom_conf, img_geom_conf)
-        algo_conf = astra.astra_dict("FP_CUDA" if "cuda" in str(img.device) else "FP")
+        proj_id = astra.create_projector("cuda" if img.device.type == "cuda" else "line", proj_geom_conf, img_geom_conf)
+        algo_conf = astra.astra_dict("FP_CUDA" if img.device.type == "cuda" else "FP")
         algo_conf["VolumeDataId"] = img_data_id
         algo_conf["ProjectionDataId"] = sino_data_id
         algo_conf["ProjectorId"] = proj_id
