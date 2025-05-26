@@ -1,11 +1,9 @@
-from typing import cast
+from torch import nn
 
-import torch
-from torch import Tensor, nn
-from typing_extensions import override
+from fun.models.unet_base import UNetBase
 
 
-class UNet(nn.Module):
+class UNet(UNetBase):
     """
     An implementation of the classic U-Net architecture.
     This implementation includes paddings and changed transpose convolution
@@ -26,8 +24,8 @@ class UNet(nn.Module):
             depth: The number of downsampling (and upsampling) operations.
             base_channels: The number of channels to convolve the input to in the first block.
         """
-        super().__init__()
-        self.__down_blocks = nn.ModuleList(
+        super().__init__(in_channels, out_channels, depth, base_channels)
+        self._down_blocks = nn.ModuleList(
             [
                 nn.Sequential(
                     nn.Conv2d(in_channels, base_channels, kernel_size=3, padding=1),
@@ -47,7 +45,7 @@ class UNet(nn.Module):
                 for i in range(1, depth)
             ]
         )
-        self.__central_block = nn.Sequential(
+        self._central_block = nn.Sequential(
             nn.MaxPool2d(2),
             nn.Conv2d(base_channels * 2 ** (depth - 1), base_channels * 2**depth, kernel_size=3, padding=1),
             nn.ReLU(),
@@ -55,7 +53,7 @@ class UNet(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=2, stride=2),
         )
-        self.__up_blocks = nn.ModuleList(
+        self._up_blocks = nn.ModuleList(
             [
                 nn.Sequential(
                     nn.Conv2d(base_channels * 2 ** (i + 1), base_channels * 2**i, kernel_size=3, padding=1),
@@ -76,29 +74,3 @@ class UNet(nn.Module):
                 )
             ]
         )
-
-    @override
-    def forward(self, x: Tensor) -> Tensor:
-        if x.ndim != 4:
-            raise ValueError(f"Expected 4D input, got {x.ndim}D input")
-        if x.shape[3] < 2 ** len(self.__down_blocks):
-            raise ValueError(f"Input width must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[3]}")
-        if x.shape[2] < 2 ** len(self.__down_blocks):
-            raise ValueError(f"Input height must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[2]}")
-        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self.__down_blocks[0])[0].weight.shape)[1]
-        if x.shape[1] != allowed_input_channels:
-            raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
-        if x.shape[3] % 2 ** len(self.__down_blocks) != 0:
-            raise ValueError(
-                f"Input width is not divisible by {2 ** len(self.__down_blocks)}, got {x.shape[3]}"
-                + f" ({x.shape[3]} / {2 ** len(self.__down_blocks)} = {x.shape[3] / 2 ** len(self.__down_blocks)})."
-            )
-        tmp = []
-        for down_block in self.__down_blocks:
-            x = down_block(x)
-            tmp.append(x)
-        x = self.__central_block(x)
-        for i, up_block in enumerate(self.__up_blocks):
-            x = torch.cat([x, tmp[-(i + 1)]], dim=1)
-            x = up_block(x)
-        return x

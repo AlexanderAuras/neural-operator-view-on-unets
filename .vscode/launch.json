@@ -22,7 +22,7 @@
             "type": "debugpy",
             "python": "${command:python.interpreterPath}",
             "request": "launch",
-            "program": "${workspaceFolder}/fun/train.py",
+            "program": "${workspaceFolder}/fun/__main__.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "pythonArgs": [
@@ -37,7 +37,7 @@
                 "--test-only",
                 "--weights=runs/mixed-2.4.pt",
                 "--no-compile",
-                "--device=cuda",
+                "--devices=cuda",
                 "--num-workers=0",
             ],
             "env": {

@@ -27,7 +27,7 @@
 module load miniconda3
 source /cm/shared/omni/apps/miniconda3/bin/activate FNO-UNet
 
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/aa609734/.conda/envs/FNO-UNet/lib/python3.11/site-packages/nvidia/cufft/lib /home/aa609734/.conda/envs/FNO-UNet/bin/python /home/aa609734/Projects/FNO-UNet/fun/train.py\
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/aa609734/.conda/envs/FNO-UNet/lib/python3.11/site-packages/nvidia/cufft/lib /home/aa609734/.conda/envs/FNO-UNet/bin/python /home/aa609734/Projects/FNO-UNet/fun/__main__.py\
     --dataset=ellipses-sweep\
     --no-compile\
     --model=unet\
@@ -35,6 +35,6 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/aa609734/.conda/envs/FNO-UNet/lib/python3
     --max-epochs=10\
     --test-only\
     --weights=runs/mixed/weights/final.pt\
-    --device=cuda\
+    --devices=cuda\
     --num-workers=0\
     $@

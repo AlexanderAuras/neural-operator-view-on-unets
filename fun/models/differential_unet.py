@@ -1,10 +1,9 @@
-from typing import cast
-import warnings
-
 import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
 from typing_extensions import override
+
+from fun.models.unet_base import UNetBase
 
 
 ## Adapted from: https://github.com/neuraloperator/neuraloperator/blob/main/neuralop/layers/differential_conv.py#L86
@@ -38,7 +37,7 @@ class DiffConv2d(nn.Module):
             return self.conv(x)
 
 
-class DiffUNet(nn.Module):
+class DiffUNet(UNetBase):
     """
     An implementation of a differential U-Net architecture with the option to get a classical U-Net by setting zero_mean = False, scale = False.
     This implementation includes paddings and changed transpose convolution
@@ -51,7 +50,15 @@ class DiffUNet(nn.Module):
             ICML 2024, https://arxiv.org/abs/2402.16845.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, depth: int = 4, base_channels: int = 64, zero_mean: bool = True, scale: bool = True) -> None:
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        depth: int = 4,
+        base_channels: int = 64,
+        zero_mean: bool = True,
+        scale: bool = True,
+    ) -> None:
         """
         Args:
             in_channels: The amount of channels of the input tensor.
@@ -59,8 +66,8 @@ class DiffUNet(nn.Module):
             depth: The number of downsampling (and upsampling) operations.
             base_channels: The number of channels to convolve the input to in the first block.
         """
-        super().__init__()
-        self.__down_blocks = nn.ModuleList(
+        super().__init__(in_channels, out_channels, depth, base_channels)
+        self._down_blocks = nn.ModuleList(
             [
                 nn.Sequential(
                     DiffConv2d(in_channels, base_channels, kernel_size=3, zero_mean=zero_mean, scale=scale),
@@ -80,7 +87,7 @@ class DiffUNet(nn.Module):
                 for i in range(1, depth)
             ]
         )
-        self.__central_block = nn.Sequential(
+        self._central_block = nn.Sequential(
             nn.MaxPool2d(2),
             DiffConv2d(base_channels * 2 ** (depth - 1), base_channels * 2**depth, kernel_size=3, zero_mean=zero_mean, scale=scale),
             nn.ReLU(),
@@ -88,7 +95,7 @@ class DiffUNet(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=2, stride=2),
         )
-        self.__up_blocks = nn.ModuleList(
+        self._up_blocks = nn.ModuleList(
             [
                 nn.Sequential(
                     DiffConv2d(base_channels * 2 ** (i + 1), base_channels * 2**i, kernel_size=3, zero_mean=zero_mean, scale=scale),
@@ -109,28 +116,3 @@ class DiffUNet(nn.Module):
                 )
             ]
         )
-
-    @override
-    def forward(self, x: Tensor) -> Tensor:
-        if x.ndim != 4:
-            raise ValueError(f"Expected 4D input, got {x.ndim}D input")
-        if x.shape[3] < 2 ** len(self.__down_blocks):
-            raise ValueError(f"Input width must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[3]}")
-        if x.shape[2] < 2 ** len(self.__down_blocks):
-            raise ValueError(f"Input height must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[2]}")
-        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self.__down_blocks[0])[0].weight.shape)[1]
-        if x.shape[1] != allowed_input_channels:
-            raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
-        if x.shape[3] % 2 ** len(self.__down_blocks) != 0:
-            warnings.warn("Input width is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
-        if x.shape[2] % 2 ** len(self.__down_blocks) != 0:
-            warnings.warn("Input height is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
-        tmp = []
-        for down_block in self.__down_blocks:
-            x = down_block(x)
-            tmp.append(x)
-        x = self.__central_block(x)
-        for i, up_block in enumerate(self.__up_blocks):
-            x = torch.cat([x, tmp[-(i + 1)]], dim=1)
-            x = up_block(x)
-        return x

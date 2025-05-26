@@ -76,7 +76,7 @@ def main() -> None:
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--debug", action="store_true")
     argparser.add_argument("--seed", type=int, default=random.randrange(0, 2**32))
-    argparser.add_argument("--device", type=torch.device, default=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    argparser.add_argument("--devices", type=torch.device, nargs="+", default=[torch.device("cuda" if torch.cuda.is_available() else "cpu")])
     argparser.add_argument("--num-workers", type=int, default=os.cpu_count())
     argparser.add_argument("--no-compile", dest="compile", action="store_false")
     argparser.add_argument("--data-parallel", action="store_true")
@@ -128,9 +128,9 @@ def main() -> None:
         if args.weights is None:
             logger.error("No weights provided for test only run")
             exit(-1)
-    if args.device.type == "cuda" and not torch.cuda.is_available():
+    if "cuda" in {x.type for x in args.devices} and not torch.cuda.is_available():
         logger.warning("No CUDA devices available, falling back to CPU")
-        args.device = torch.device("cpu")
+        args.devices = [torch.device("cpu") if x.type == "cuda" else x for x in args.devices]
 
     # Configure PyTorch
     logger.info("Configuring PyTorch")
@@ -161,7 +161,7 @@ def main() -> None:
                 target_shape=(64, 64),
                 noise_type="gaussian",
                 noise_level=args.noise_level,
-                radon_device=args.device,
+                radon_device=args.devices[0],
             )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
@@ -172,7 +172,7 @@ def main() -> None:
                     target_shape=(64, 64),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
-                    radon_device=args.device,
+                    radon_device=args.devices[0],
                 ),
             }
             test_datasets = {
@@ -189,7 +189,7 @@ def main() -> None:
                 target_shape=(128, 128),
                 noise_type="gaussian",
                 noise_level=args.noise_level,
-                radon_device=args.device,
+                radon_device=args.devices[0],
             )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
@@ -200,7 +200,7 @@ def main() -> None:
                     target_shape=(128, 128),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
-                    radon_device=args.device,
+                    radon_device=args.devices[0],
                 ),
             }
             test_datasets = {
@@ -217,7 +217,7 @@ def main() -> None:
                 target_shape=(256, 256),
                 noise_type="gaussian",
                 noise_level=args.noise_level,
-                radon_device=args.device,
+                radon_device=args.devices[0],
             )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
@@ -228,7 +228,7 @@ def main() -> None:
                     target_shape=(256, 256),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
-                    radon_device=args.device,
+                    radon_device=args.devices[0],
                 ),
             }
             test_datasets = {
@@ -246,7 +246,7 @@ def main() -> None:
                     target_shape=(64, 64),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
-                    radon_device=args.device,
+                    radon_device=args.devices[0],
                 ),
                 CTPostProcessDataset(
                     EllipsesDataset(2133, 1024, args.num_ellipses),
@@ -255,7 +255,7 @@ def main() -> None:
                     target_shape=(128, 128),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
-                    radon_device=args.device,
+                    radon_device=args.devices[0],
                 ),
                 CTPostProcessDataset(
                     EllipsesDataset(2133, 1024, args.num_ellipses),
@@ -264,7 +264,7 @@ def main() -> None:
                     target_shape=(256, 256),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
-                    radon_device=args.device,
+                    radon_device=args.devices[0],
                 ),
             ]
             train_dataset = torch.utils.data.ConcatDataset(train_datasets)
@@ -277,7 +277,7 @@ def main() -> None:
                     target_shape=(64, 64),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
-                    radon_device=args.device,
+                    radon_device=args.devices[0],
                 ),
                 "128x128": CTPostProcessDataset(
                     EllipsesDataset(533, 1024, args.num_ellipses),
@@ -286,7 +286,7 @@ def main() -> None:
                     target_shape=(128, 128),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
-                    radon_device=args.device,
+                    radon_device=args.devices[0],
                 ),
                 "256x256": CTPostProcessDataset(
                     EllipsesDataset(533, 1024, args.num_ellipses),
@@ -295,7 +295,7 @@ def main() -> None:
                     target_shape=(256, 256),
                     noise_type="gaussian",
                     noise_level=args.noise_level,
-                    radon_device=args.device,
+                    radon_device=args.devices[0],
                 ),
             }
             test_datasets = {
@@ -356,51 +356,35 @@ def main() -> None:
     logger.info("Creating model")
     match args.model:
         case "unet":
-            model = UNet(1, 1).to(args.device)
+            model = UNet(1, 1)
         case "dncnn":
-            model = DnCNN(1).to(args.device)
+            model = DnCNN(1)
         case "unet-interp":
-            model = InterpolatingUNet(1, 1, base_input_size=64, max_scale_factor=4).to(args.device)
+            model = InterpolatingUNet(1, 1, base_input_size=64, max_scale_factor=4)
         case "fno":
-            model = FNOUNet(1, 1).to(args.device)
+            model = FNOUNet(1, 1)
         case "heat":
-            model = HeatUNet(1).to(args.device)
+            model = HeatUNet(1, 1)
         case "classicdiff":
-            model = DiffUNet(1, 1, zero_mean=False).to(args.device)
+            model = DiffUNet(1, 1, zero_mean=False)
         case "diff":
-            model = DiffUNet(1, 1).to(args.device)
+            model = DiffUNet(1, 1)
         case "jump":
-            model = DiffUNet(1, 1, scale=False).to(args.device)
+            model = DiffUNet(1, 1, scale=False)
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
-    if args.data_parallel:
-        logger.info("Parallelizing model")
-        model = cast(nn.Module, nn.DataParallel(model))
-    if args.compile:
-        logger.info("Compiling model")
-        fwd_func = torch.compile(model)
-    else:
-        fwd_func = model.__call__
     logger.info("Rendering compute graph")
-    compute_graph = torchview.draw_graph(model, input_size=(1, *exemplary_image_shape), show_shapes=True, device=args.device)
+    compute_graph = torchview.draw_graph(model, input_size=(1, *exemplary_image_shape), show_shapes=True, device=args.devices[0])
     compute_graph.visual_graph.render("compute-graph", directory=out_dir, format="pdf")
     out_dir.joinpath("compute-graph").unlink()
     logger.info("Calculating model summary")
-    model_statistics = torchinfo.summary(model, input_size=(1, *exemplary_image_shape), verbose=0, device=args.device)
+    model_statistics = torchinfo.summary(model, input_size=(1, *exemplary_image_shape), verbose=0, device=args.devices[0])
     logger.info(model_statistics)
-
-    # Create loss function, optimizer, and learning rate scheduler
-    logger.info("Creating loss function, optimizer, and learning rate scheduler")
-    loss_function = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.max_epochs)
-
-    logger.info("Creating tensorboard logger")
-    tb_logger = torch.utils.tensorboard.writer.SummaryWriter(out_dir)
     out_dir.joinpath("weights").mkdir(parents=True)
     if args.weights is not None:
         logger.info(f"Loading initial weights {args.weights}")
-        model.load_state_dict(torch.load(args.weights, map_location=args.device))
+        model = model.cpu()
+        model.load_state_dict(torch.load(args.weights, map_location="cpu"))
     else:
         logger.info("Saving initial weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'initial.pt'}")
@@ -409,6 +393,28 @@ def main() -> None:
         torch.save(model.state_dict(), out_dir / "weights" / "initial.pt")
         [torch.save(model.state_dict(), out_dir / "weights" / f"best-{name}.pt") for name in val_dataloaders.keys()]
         torch.save(model.state_dict(), out_dir / "weights" / "best-all.pt")
+    if hasattr(model, "to_multi_dev"):
+        model = model.to_multi_dev(*args.devices)
+    else:
+        model = model.to(args.devices[0])
+    if args.data_parallel:
+        logger.info("Parallelizing model")
+        model = cast(nn.Module, nn.DataParallel(model))
+    if args.compile:
+        logger.info("Compiling model")
+        fwd_func = torch.compile(model)
+    else:
+        fwd_func = model.__call__
+
+    # Create loss function, optimizer, and learning rate scheduler
+    logger.info("Creating loss function, optimizer, and learning rate scheduler")
+    loss_function = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.max_epochs)
+
+    # Setting up model, metrics, data, etc. logging
+    logger.info("Creating tensorboard logger")
+    tb_logger = torch.utils.tensorboard.writer.SummaryWriter(out_dir)
     best_val_losses = {**{name: float("inf") for name in val_dataloaders.keys()}, "all": float("inf")}
 
     # Initial validation before training
@@ -418,8 +424,8 @@ def main() -> None:
         for name, dataloader in tqdm(val_dataloaders.items(), desc="Validation", unit="dataset", position=0, leave=False):
             val_loss = 0.0
             for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
-                input_ = sample["input"].to(args.device)
-                target = sample["target"].to(args.device)
+                input_ = sample["input"].to(args.devices[0])
+                target = sample["target"].to(args.devices[0])
                 prediction = fwd_func(input_)
                 val_loss += loss_function(prediction, target).item()
                 if i == 0:
@@ -442,14 +448,14 @@ def main() -> None:
             val_loss /= len(dataloader)
             best_val_losses[name] = val_loss
             with out_dir.joinpath(f"val-loss-{name}.csv").open("w") as file:
-                file.write("step, loss, time\n")
-                file.write(f"0, {val_loss}, {datetime.datetime.now().isoformat()}\n")
+                file.write("step,loss,time\n")
+                file.write(f"0,{val_loss},{datetime.datetime.now().isoformat()}\n")
             tb_logger.add_scalar(f"val/{name}-loss", val_loss, global_step=0)
 
         # Main training loop
         logger.info("Starting training loop")
         with out_dir.joinpath("train-loss.csv").open("w") as file:
-            file.write("step, loss, time\n")
+            file.write("step,loss,time\n")
         try:
             epoch = 0
             epochs_iter = trange(args.max_epochs, desc="Epochs", unit="epoch", position=0, leave=False)
@@ -458,8 +464,8 @@ def main() -> None:
                 model.train()
                 batches_iter = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc="Training", unit="batch", position=1, leave=False)
                 for batch_no, sample in batches_iter:
-                    input_ = sample["input"].to(args.device)
-                    target = sample["target"].to(args.device)
+                    input_ = sample["input"].to(args.devices[0])
+                    target = sample["target"].to(args.devices[0])
                     with torch.enable_grad():
                         prediction = fwd_func(input_)
                         loss = loss_function(prediction, target)
@@ -467,7 +473,7 @@ def main() -> None:
                     loss.backward()
                     optimizer.step()
                     with out_dir.joinpath("train-loss.csv").open("a") as file:
-                        file.write(f"{epoch * len(train_dataloader) + batch_no}, {loss.item()}, {datetime.datetime.now().isoformat()}\n")
+                        file.write(f"{epoch * len(train_dataloader) + batch_no},{loss.item()},{datetime.datetime.now().isoformat()}\n")
                     tb_logger.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + batch_no)
                     batches_iter.set_postfix({"Train-Loss": loss.item()})
                 batches_iter.close()
@@ -478,8 +484,8 @@ def main() -> None:
                 for name, dataloader in tqdm(val_dataloaders.items(), desc="Validation", unit="dataset", position=1, leave=False):
                     val_loss = 0.0
                     for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=2, leave=False):
-                        input_ = sample["input"].to(args.device)
-                        target = sample["target"].to(args.device)
+                        input_ = sample["input"].to(args.devices[0])
+                        target = sample["target"].to(args.devices[0])
                         prediction = fwd_func(input_)
                         val_loss += loss_function(prediction, target).item()
                         if i == 0:
@@ -507,7 +513,7 @@ def main() -> None:
                         best_val_losses[name] = val_loss
                         torch.save(model.state_dict(), out_dir / "weights" / f"best-{name}.pt")
                     with out_dir.joinpath(f"val-loss-{name}.csv").open("a") as file:
-                        file.write(f"{epoch + 1}, {val_loss}, {datetime.datetime.now().isoformat()}\n")
+                        file.write(f"{epoch + 1},{val_loss},{datetime.datetime.now().isoformat()}\n")
                     tb_logger.add_scalar(f"val/{name}-loss", val_loss, global_step=epoch + 1)
                     lr_scheduler.step()
                     logger.info(f"Epoch {epoch + 1}: {name} val. loss = {val_loss:.3e}")
@@ -518,7 +524,7 @@ def main() -> None:
                     best_val_losses["all"] = all_val_loss
                     torch.save(model.state_dict(), out_dir / "weights" / "best-all.pt")
                 with out_dir.joinpath("val-loss-all.csv").open("a") as file:
-                    file.write(f"{epoch + 1}, {all_val_loss}, {datetime.datetime.now().isoformat()}\n")
+                    file.write(f"{epoch + 1},{all_val_loss},{datetime.datetime.now().isoformat()}\n")
                 tb_logger.add_scalar("val/avg-all-loss", all_val_loss, global_step=epoch + 1)
                 lr_scheduler.step()
                 logger.info(f"Epoch {epoch + 1}: Avg. val. loss = {all_val_loss:.3e}")
@@ -541,7 +547,7 @@ def main() -> None:
         logger.debug(f"    Path: {out_dir / 'model.onnx'}")
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, message=r"Converting a tensor to a Python boolean might cause the trace to be incorrect.*")
-            torch.onnx.export(model, (torch.randn((1, *exemplary_image_shape), device=args.device),), str(out_dir / "model.onnx"))
+            torch.onnx.export(model, (torch.randn((1, *exemplary_image_shape), device=args.devices[0]),), str(out_dir / "model.onnx"))
 
     # Test model and log test performance
     logger.info("Testing model")
@@ -549,14 +555,14 @@ def main() -> None:
         model.load_state_dict(torch.load(out_dir / "weights" / "best-all.pt"))
     model.eval()
     with out_dir.joinpath("test-results.csv").open("w") as file:
-        file.write("dataset, metric, value\n")
+        file.write("dataset,metric,value\n")
     out_dir.joinpath("test-imgs").mkdir(parents=True)
     all_test_loss = 0.0
     for name, dataloader in tqdm(test_dataloaders.items(), desc="Testing", unit="dataset", position=0, leave=True):
         test_loss = 0.0
         for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
-            input_ = sample["input"].to(args.device)
-            target = sample["target"].to(args.device)
+            input_ = sample["input"].to(args.devices[0])
+            target = sample["target"].to(args.devices[0])
             prediction = fwd_func(input_)
             test_loss += loss_function(prediction, target).item()
             if i == 0:
@@ -577,11 +583,11 @@ def main() -> None:
         all_test_loss += test_loss
         logger.info(f'Final test loss on "{name}": {test_loss:.3e}')
         with out_dir.joinpath("test-results.csv").open("a") as file:
-            file.write(f"{name}, loss, {test_loss}\n")
+            file.write(f"{name},loss,{test_loss}\n")
         tb_logger.add_scalar(f"test/{name}-loss", test_loss, global_step=0)
     all_test_loss /= len(test_dataloaders)
     with out_dir.joinpath("test-results.csv").open("a") as file:
-        file.write(f"all-avg, loss, {all_test_loss}\n")
+        file.write(f"all-avg,loss,{all_test_loss}\n")
     tb_logger.add_scalar("test/avg-all-loss", all_test_loss, global_step=0)
     logger.info(f"Final avg. test loss on all datasets: {all_test_loss:.3e}")
 

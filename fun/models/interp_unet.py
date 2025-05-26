@@ -1,11 +1,12 @@
 import math
-from typing import Literal, cast
-import warnings
+from typing import Literal
 
 import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
 from typing_extensions import override
+
+from fun.models.unet_base import UNetBase
 
 
 class InterpolatingConv2d(nn.Module):
@@ -55,7 +56,7 @@ class InterpolatingConv2d(nn.Module):
         return F.conv2d(x, weight, self.bias)
 
 
-class InterpolatingUNet(nn.Module):
+class InterpolatingUNet(UNetBase):
     def __init__(
         self,
         in_channels: int,
@@ -66,8 +67,8 @@ class InterpolatingUNet(nn.Module):
         base_input_size: int,
         max_scale_factor: int,
     ) -> None:
-        super().__init__()
-        self.__down_blocks = nn.ModuleList(
+        super().__init__(in_channels, out_channels, depth, base_channels)
+        self._down_blocks = nn.ModuleList(
             [
                 nn.Sequential(
                     InterpolatingConv2d(in_channels, base_channels, 3, base_input_size, max_scale_factor, padding="same"),
@@ -87,7 +88,7 @@ class InterpolatingUNet(nn.Module):
                 for i in range(1, depth)
             ]
         )
-        self.__central_block = nn.Sequential(
+        self._central_block = nn.Sequential(
             nn.MaxPool2d(2),
             InterpolatingConv2d(base_channels * 2 ** (depth - 1), base_channels * 2**depth, 3, base_input_size // 2**depth, max_scale_factor, padding="same"),
             nn.ReLU(),
@@ -97,7 +98,7 @@ class InterpolatingUNet(nn.Module):
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=3, padding="same"),
         )
-        self.__up_blocks = nn.ModuleList(
+        self._up_blocks = nn.ModuleList(
             [
                 nn.Sequential(
                     InterpolatingConv2d(base_channels * 2 ** (i + 1), base_channels * 2**i, 3, base_input_size // 2**i, max_scale_factor, padding="same"),
@@ -120,28 +121,3 @@ class InterpolatingUNet(nn.Module):
                 )
             ]
         )
-
-    @override
-    def forward(self, x: Tensor) -> Tensor:
-        if x.ndim != 4:
-            raise ValueError(f"Expected 4D input, got {x.ndim}D input")
-        if x.shape[3] < 2 ** len(self.__down_blocks):
-            raise ValueError(f"Input width must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[3]}")
-        if x.shape[2] < 2 ** len(self.__down_blocks):
-            raise ValueError(f"Input height must be greater than or equal to {2 ** len(self.__down_blocks)}, got {x.shape[2]}")
-        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self.__down_blocks[0])[0].weight.shape)[1]
-        if x.shape[1] != allowed_input_channels:
-            raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
-        if x.shape[3] % 2 ** len(self.__down_blocks) != 0:
-            warnings.warn("Input width is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
-        if x.shape[2] % 2 ** len(self.__down_blocks) != 0:
-            warnings.warn("Input height is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
-        tmp = []
-        for down_block in self.__down_blocks:
-            x = down_block(x)
-            tmp.append(x)
-        x = self.__central_block(x)
-        for i, up_block in enumerate(self.__up_blocks):
-            x = torch.cat([x, tmp[-(i + 1)]], dim=1)
-            x = up_block(x)
-        return x
