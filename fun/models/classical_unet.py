@@ -16,6 +16,7 @@ class UNet(UNetBase):
         out_channels: int,
         depth: int = 4,
         base_channels: int = 64,
+        use_checkpointing: bool = False,
     ) -> None:
         """
         Args:
@@ -24,7 +25,7 @@ class UNet(UNetBase):
             depth: The number of downsampling (and upsampling) operations.
             base_channels: The number of channels to convolve the input to in the first block.
         """
-        super().__init__(in_channels, out_channels, depth, base_channels)
+        super().__init__(in_channels, out_channels, depth, base_channels, use_checkpointing)
         self._down_blocks = nn.ModuleList(
             [
                 nn.Sequential(

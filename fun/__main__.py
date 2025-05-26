@@ -80,6 +80,7 @@ def main() -> None:
     argparser.add_argument("--num-workers", type=int, default=os.cpu_count())
     argparser.add_argument("--no-compile", dest="compile", action="store_false")
     argparser.add_argument("--data-parallel", action="store_true")
+    argparser.add_argument("--use-checkpointing", action="store_true")
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
     argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "fno", "heat", "classicdiff", "diff", "jump"], required=True)
@@ -101,8 +102,9 @@ def main() -> None:
             shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True)
 
-    redirect_stdout(out_dir.joinpath("stdout.log").open("w")).__enter__()
-    redirect_stderr(out_dir.joinpath("stderr.log").open("w")).__enter__()
+    if not os.isatty(sys.stdout.fileno()):
+        redirect_stdout(out_dir.joinpath("stdout.log").open("w")).__enter__()
+        redirect_stderr(out_dir.joinpath("stderr.log").open("w")).__enter__()
     setup_logging(Path(__file__).resolve().parents[1] / "logging.conf", out_dir)
     logger = logging.getLogger("fun.train")
     logger.info(f"{'=' * 20} {out_dir.name.upper()} {'=' * 20}")
@@ -356,13 +358,13 @@ def main() -> None:
     logger.info("Creating model")
     match args.model:
         case "unet":
-            model = UNet(1, 1)
+            model = UNet(1, 1, use_checkpointing=args.use_checkpointing)
         case "dncnn":
-            model = DnCNN(1)
+            model = DnCNN(1, use_checkpointing=args.use_checkpointing)
         case "unet-interp":
-            model = InterpolatingUNet(1, 1, base_input_size=64, max_scale_factor=4)
+            model = InterpolatingUNet(1, 1, base_input_size=64, max_scale_factor=4, use_checkpointing=args.use_checkpointing)
         case "fno":
-            model = FNOUNet(1, 1)
+            model = FNOUNet(1, 1, use_checkpointing=args.use_checkpointing)
         case "heat":
             model = HeatUNet(1, 1)
         case "classicdiff":
@@ -556,15 +558,19 @@ def main() -> None:
     model.eval()
     with out_dir.joinpath("test-results.csv").open("w") as file:
         file.write("dataset,metric,value\n")
+    with out_dir.joinpath("baseline.csv").open("w") as file:
+        file.write("dataset,metric,value\n")
     out_dir.joinpath("test-imgs").mkdir(parents=True)
     all_test_loss = 0.0
     for name, dataloader in tqdm(test_dataloaders.items(), desc="Testing", unit="dataset", position=0, leave=True):
         test_loss = 0.0
+        baseline_loss = 0.0
         for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
             input_ = sample["input"].to(args.devices[0])
             target = sample["target"].to(args.devices[0])
             prediction = fwd_func(input_)
             test_loss += loss_function(prediction, target).item()
+            baseline_loss += loss_function(input_, target).item()
             if i == 0:
                 for j in range(min(4, input_.shape[0])):
                     np.save(out_dir / "test-imgs" / f"{name}-input-{j}.npy", input_[j].cpu().detach().numpy())
@@ -580,11 +586,15 @@ def main() -> None:
                     tb_logger.add_image(f"test/{name}-target-{j}", normalized(target[j]), global_step=0)
                     tb_logger.add_image(f"test/{name}-prediction-{j}", normalized(prediction[j]), global_step=0)
         test_loss /= len(dataloader)
+        baseline_loss /= len(dataloader)
         all_test_loss += test_loss
         logger.info(f'Final test loss on "{name}": {test_loss:.3e}')
         with out_dir.joinpath("test-results.csv").open("a") as file:
             file.write(f"{name},loss,{test_loss}\n")
+        with out_dir.joinpath("baseline.csv").open("a") as file:
+            file.write(f"{name},loss,{baseline_loss}\n")
         tb_logger.add_scalar(f"test/{name}-loss", test_loss, global_step=0)
+        tb_logger.add_scalar(f"baseline/{name}-loss", baseline_loss, global_step=0)
     all_test_loss /= len(test_dataloaders)
     with out_dir.joinpath("test-results.csv").open("a") as file:
         file.write(f"all-avg,loss,{all_test_loss}\n")

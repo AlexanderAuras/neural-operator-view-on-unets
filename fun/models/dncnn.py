@@ -1,7 +1,10 @@
 from math import sqrt
 from typing import cast
 
+import torch
 from torch import Tensor, nn
+import torch.utils
+import torch.utils.checkpoint
 from typing_extensions import override
 
 
@@ -12,8 +15,11 @@ class DnCNN(nn.Module):
         depth: int = 17,
         channel_count: int = 64,
         kernel_size: int = 3,
+        *,
+        use_checkpointing: bool = False,
     ) -> None:
-        super(DnCNN, self).__init__()
+        super().__init__()
+        self.__use_checkpointing = use_checkpointing
         self.__blocks = nn.ModuleList()
         _ = self.__blocks.append(
             nn.Sequential(
@@ -42,10 +48,20 @@ class DnCNN(nn.Module):
                     if hasattr(layer, "running_var") and layer.running_var is not None:
                         nn.init.constant_(layer.running_var, 0.01)
 
+    def __partial__forward(self, x: Tensor) -> Tensor:
+        for block in cast(list[nn.Sequential], self.__blocks)[: len(self.__blocks) // 2]:
+            x = x.to(block[0].weight.device)
+            x = block(x)
+        return x
+
     @override
     def forward(self, x: Tensor) -> Tensor:
         orig_x = x
-        for block in self.__blocks:
-            x = x.to(cast(list[nn.Module], block)[0].weight.device)
+        if self.__use_checkpointing:
+            x = cast(Tensor, torch.utils.checkpoint.checkpoint(self.__partial__forward, x, use_reentrant=False))
+        else:
+            x = self.__partial__forward(x)
+        for block in cast(list[nn.Sequential], self.__blocks)[len(self.__blocks) // 2 :]:
+            x = x.to(block[0].weight.device)
             x = block(x)
         return orig_x - x

@@ -63,11 +63,12 @@ class InterpolatingUNet(UNetBase):
         out_channels: int,
         depth: int = 4,
         base_channels: int = 64,
+        use_checkpointing: bool = False,
         *,
         base_input_size: int,
         max_scale_factor: int,
     ) -> None:
-        super().__init__(in_channels, out_channels, depth, base_channels)
+        super().__init__(in_channels, out_channels, depth, base_channels, use_checkpointing)
         self._down_blocks = nn.ModuleList(
             [
                 nn.Sequential(

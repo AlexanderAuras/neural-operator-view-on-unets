@@ -3,6 +3,7 @@ import warnings
 
 import torch
 from torch import Tensor, nn
+import torch.utils.checkpoint
 from typing_extensions import override
 
 from fun.models.unet_base import UNetBase
@@ -26,11 +27,12 @@ class FNOUNet(UNetBase):
         in_channels: int,
         out_channels: int,
         depth: int = 4,
+        use_checkpointing: bool = False,
         base_channels: int = 64,
         kbase1: int = 128,
         kbase2: int = 128,
     ) -> None:
-        super().__init__(in_channels, out_channels, depth, base_channels)
+        super().__init__(in_channels, out_channels, depth, base_channels, use_checkpointing)
         self._down_blocks = nn.ModuleList(
             [
                 nn.Sequential(
@@ -81,6 +83,18 @@ class FNOUNet(UNetBase):
             ]
         )
 
+    def __partial_forward(self, x: Tensor) -> tuple[Tensor, list[Tensor]]:
+        tmp = []
+        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._down_blocks)[0])).weight.device
+        x = x.to(dev)
+        for down_block in self._down_blocks:
+            x = down_block(x)
+            tmp.append(x)
+        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[nn.Module], self._central_block))).weight.device
+        x = x.to(dev)
+        x = self._central_block(x)
+        return x, tmp
+
     @override
     def forward(self, x: Tensor) -> Tensor:
         if x.ndim != 4:
@@ -98,15 +112,13 @@ class FNOUNet(UNetBase):
             warnings.warn("Input width is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
         if x.shape[2] % 2 ** len(self._down_blocks) != 0:
             warnings.warn("Input height is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
-        tmp = []
         orig_device = x.device
-        x = x.to(cast(list[list[nn.Module]], self._down_blocks)[0][0].weight.device)
-        for down_block in self._down_blocks:
-            x = down_block(x)
-            tmp.append(x)
-        x = x.to(cast(list[nn.Module], self._central_block)[0].weight.device)
-        x = self._central_block(x)
-        x = x.to(cast(list[list[nn.Module]], self._up_blocks)[0][0].weight.device)
+        if self._use_checkpointing:
+            x, tmp = cast(Tensor, torch.utils.checkpoint.checkpoint(self.__partial_forward, x, use_reentrant=False))
+        else:
+            x, tmp = self.__partial_forward(x)
+        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._up_blocks)[0])).weight.device
+        x = x.to(dev)
         for i, up_block in enumerate(self._up_blocks):
             x = torch.cat([x, tmp[-(i + 1)]], dim=1)
             x = up_block(x)
@@ -120,10 +132,11 @@ class HeatUNet(UNetBase):
         out_channels: int,
         depth: int = 4,
         base_channels: int = 64,
+        use_checkpointing: bool = False,
         kbase1: int = 128,
         kbase2: int = 128,
     ) -> None:
-        super().__init__(in_channels, out_channels, depth, base_channels)
+        super().__init__(in_channels, out_channels, depth, base_channels, use_checkpointing)
         self._down_blocks = nn.ModuleList(
             [
                 nn.Sequential(
@@ -165,6 +178,16 @@ class HeatUNet(UNetBase):
             ]
         )
 
+    def __partial_forward(self, x: Tensor) -> Tensor:
+        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._down_blocks)[0])).weight.device
+        x = x.to(dev)
+        for down_block in self._down_blocks:
+            x = down_block(x)
+        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[nn.Module], self._central_block))).weight.device
+        x = x.to(dev)
+        x = self._central_block(x)
+        return x
+
     @override
     def forward(self, x: Tensor) -> Tensor:
         if x.ndim != 4:
@@ -183,12 +206,12 @@ class HeatUNet(UNetBase):
         if x.shape[2] % 2 ** len(self._down_blocks) != 0:
             warnings.warn("Input height is not divisible by two to the power of the number of downsampling operations. The output size may not match the input size.")
         orig_device = x.device
-        x = x.to(cast(list[list[nn.Module]], self._down_blocks)[0][0].weight.device)
-        for down_block in self._down_blocks:
-            x = down_block(x)
-        x = x.to(cast(list[nn.Module], self._central_block)[0].weight.device)
-        x = self._central_block(x)
-        x = x.to(cast(list[list[nn.Module]], self._up_blocks)[0][0].weight.device)
+        if self._use_checkpointing:
+            x = cast(Tensor, torch.utils.checkpoint.checkpoint(self.__partial_forward, x, use_reentrant=False))
+        else:
+            x = self.__partial_forward(x)
+        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._up_blocks)[0])).weight.device
+        x = x.to(dev)
         for i, up_block in enumerate(self._up_blocks):
             x = up_block(x)
         return x.to(orig_device)
