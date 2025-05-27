@@ -81,6 +81,7 @@ def main() -> None:
     argparser.add_argument("--no-compile", dest="compile", action="store_false")
     argparser.add_argument("--data-parallel", action="store_true")
     argparser.add_argument("--use-checkpointing", action="store_true")
+    argparser.add_argument("--forced-run-name", type=str, default=None)
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
     argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "fno", "heat", "classicdiff", "diff", "jump"], required=True)
@@ -95,7 +96,10 @@ def main() -> None:
     argparser.add_argument("--num-ellipses", type=int, default=10)
     args = argparser.parse_args()
 
-    out_dir = BASE_OUT_DIR / randomname.get_name()
+    if args.forced_run_name is not None:
+        out_dir = BASE_OUT_DIR / args.forced_run_name
+    else:
+        out_dir = BASE_OUT_DIR / randomname.get_name()
     if args.debug:
         out_dir = out_dir.parent.joinpath("_debug")
         if out_dir.exists():
@@ -376,11 +380,11 @@ def main() -> None:
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     logger.info("Rendering compute graph")
-    compute_graph = torchview.draw_graph(model, input_size=(1, *exemplary_image_shape), show_shapes=True, device=args.devices[0])
+    compute_graph = torchview.draw_graph(model, input_size=(1, *exemplary_image_shape), show_shapes=True, device="cpu")
     compute_graph.visual_graph.render("compute-graph", directory=out_dir, format="pdf")
     out_dir.joinpath("compute-graph").unlink()
     logger.info("Calculating model summary")
-    model_statistics = torchinfo.summary(model, input_size=(1, *exemplary_image_shape), verbose=0, device=args.devices[0])
+    model_statistics = torchinfo.summary(model, input_size=(1, *exemplary_image_shape), verbose=0, device="cpu")
     logger.info(model_statistics)
     out_dir.joinpath("weights").mkdir(parents=True)
     if args.weights is not None:

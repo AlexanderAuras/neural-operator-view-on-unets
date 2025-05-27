@@ -119,6 +119,7 @@ class FNOUNet(UNetBase):
             x, tmp = self.__partial_forward(x)
         dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._up_blocks)[0])).weight.device
         x = x.to(dev)
+        tmp = [y.to(dev) for y in tmp]
         for i, up_block in enumerate(self._up_blocks):
             x = torch.cat([x, tmp[-(i + 1)]], dim=1)
             x = up_block(x)
@@ -212,6 +213,6 @@ class HeatUNet(UNetBase):
             x = self.__partial_forward(x)
         dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._up_blocks)[0])).weight.device
         x = x.to(dev)
-        for i, up_block in enumerate(self._up_blocks):
+        for _, up_block in enumerate(self._up_blocks):
             x = up_block(x)
         return x.to(orig_device)
