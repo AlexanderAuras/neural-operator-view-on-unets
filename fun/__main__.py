@@ -30,9 +30,9 @@ from fun.data.ct_dataset import CTPostProcessDataset
 from fun.data.ellipses_dataset import EllipsesDataset
 from fun.data.multi_res_batch_sampler import MultiResolutionBatchSampler
 from fun.models.classical_unet import UNet
-from fun.models.differential_unet import DiffUNet
 from fun.models.dncnn import DnCNN
 from fun.models.fno_unet import FNOUNet, HeatUNet
+from fun.models.flexi_unet import FlexiUNet
 from fun.models.interp_unet import InterpolatingUNet
 
 
@@ -84,10 +84,11 @@ def main() -> None:
     argparser.add_argument("--forced-run-name", type=str, default=None)
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
-    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "fno", "heat", "classicdiff", "diff", "jump"], required=True)
+    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "fno", "heat", "flexi"], required=True)
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
     argparser.add_argument("--batch-size", type=int, default=32)
+    argparser.add_argument("--accumulation-steps", type=int, default=1)
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
     argparser.add_argument("--model-save-freq", type=int, default=1)
@@ -371,12 +372,8 @@ def main() -> None:
             model = FNOUNet(1, 1, use_checkpointing=args.use_checkpointing)
         case "heat":
             model = HeatUNet(1, 1)
-        case "classicdiff":
-            model = DiffUNet(1, 1, zero_mean=False)
-        case "diff":
-            model = DiffUNet(1, 1)
-        case "jump":
-            model = DiffUNet(1, 1, scale=False)
+        case "flexi":
+            model = FlexiUNet(1, 1, modes = {'down': 'diff', 'central': 'fno' , 'up': 'fno'})
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     logger.info("Rendering compute graph")
@@ -469,15 +466,23 @@ def main() -> None:
                 # Train one epoch
                 model.train()
                 batches_iter = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc="Training", unit="batch", position=1, leave=False)
+                optimizer.zero_grad()
                 for batch_no, sample in batches_iter:
                     input_ = sample["input"].to(args.devices[0])
                     target = sample["target"].to(args.devices[0])
                     with torch.enable_grad():
                         prediction = fwd_func(input_)
                         loss = loss_function(prediction, target)
-                    optimizer.zero_grad()
+                        loss = loss/args.accumulation_steps
+                    #optimizer.zero_grad()
+                    #loss.backward()
+                    #optimizer.step()
+                    
                     loss.backward()
-                    optimizer.step()
+                    if (batch_no + 1) % args.accumulation_steps == 0:
+                        optimizer.step()
+                        optimizer.zero_grad()
+                        
                     with out_dir.joinpath("train-loss.csv").open("a") as file:
                         file.write(f"{epoch * len(train_dataloader) + batch_no},{loss.item()},{datetime.datetime.now().isoformat()}\n")
                     tb_logger.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + batch_no)
