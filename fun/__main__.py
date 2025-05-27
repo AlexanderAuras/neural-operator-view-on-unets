@@ -84,6 +84,7 @@ def main() -> None:
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
     argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "fno", "heat", "flexi"], required=True)
+    argparser.add_argument("--flexi-modes", nargs="+", default=['diff', 'fno', 'fno'])
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
     argparser.add_argument("--batch-size", type=int, default=32)
@@ -369,7 +370,7 @@ def main() -> None:
         case "heat":
             model = HeatUNet(1, 1)
         case "flexi":
-            model = FlexiUNet(1, 1, modes = {'down': 'diff', 'central': 'fno' , 'up': 'fno'})
+            model = FlexiUNet(1, 1, modes = {'down': args.flexi_modes[0], 'central': args.flexi_modes[1] , 'up': args.flexi_modes[2]})
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     logger.info("Rendering compute graph")
