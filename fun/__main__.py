@@ -87,7 +87,7 @@ def main() -> None:
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
     argparser.add_argument("--batch-size", type=int, default=32)
-    
+    argparser.add_argument("--accumulation-steps", type=int, default=1)
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
     argparser.add_argument("--model-save-freq", type=int, default=1)
@@ -462,15 +462,23 @@ def main() -> None:
                 # Train one epoch
                 model.train()
                 batches_iter = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc="Training", unit="batch", position=1, leave=False)
+                optimizer.zero_grad()
                 for batch_no, sample in batches_iter:
                     input_ = sample["input"].to(args.devices[0])
                     target = sample["target"].to(args.devices[0])
                     with torch.enable_grad():
                         prediction = fwd_func(input_)
                         loss = loss_function(prediction, target)
-                    optimizer.zero_grad()
+                        loss = loss/args.accumulation_steps
+                    #optimizer.zero_grad()
+                    #loss.backward()
+                    #optimizer.step()
+                    
                     loss.backward()
-                    optimizer.step()
+                    if (batch_no + 1) % args.accumulation_steps == 0:
+                        optimizer.step()
+                        optimizer.zero_grad()
+                        
                     with out_dir.joinpath("train-loss.csv").open("a") as file:
                         file.write(f"{epoch * len(train_dataloader) + batch_no},{loss.item()},{datetime.datetime.now().isoformat()}\n")
                     tb_logger.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + batch_no)

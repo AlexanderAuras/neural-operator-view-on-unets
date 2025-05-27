@@ -67,8 +67,8 @@ def classicLayer(in_channels, out_channels, level = 0):
     return nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
 
 def fnoLayer(in_channels, out_channels, level = 0):
-    kbase1 = 32
-    kbase2 = 32
+    kbase1 = 64
+    kbase2 = 64
     return SpectralConv2d(in_channels, out_channels, ksize1=kbase1//(2**level), ksize2=kbase2//(2**level))
 
 def finiteDiffLayer(in_channels, out_channels, level=0):
