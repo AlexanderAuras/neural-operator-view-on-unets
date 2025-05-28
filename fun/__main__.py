@@ -31,8 +31,8 @@ from fun.data.ellipses_dataset import EllipsesDataset
 from fun.data.multi_res_batch_sampler import MultiResolutionBatchSampler
 from fun.models.classical_unet import UNet
 from fun.models.dncnn import DnCNN
-from fun.models.fno_unet import FNOUNet, HeatUNet
 from fun.models.flexi_unet import FlexiUNet
+from fun.models.fno_unet import FNOUNet, HeatUNet
 from fun.models.interp_unet import InterpolatingUNet
 
 
@@ -324,9 +324,9 @@ def main() -> None:
                     noise_type="gaussian",
                     noise_level=args.noise_level,
                 )
-                for r in range(16, 305, 16)
+                for r in range(*((64, 257, 64) if args.model == "unet-interp" else (16, 305, 16)))
             }
-            exemplary_image_shape = (1, 304, 304)
+            exemplary_image_shape = (1, 256, 256) if args.model == "unet-interp" else (1, 304, 304)
         case _:
             raise ValueError(f'Unknown dataset: "{args.dataset}"')
     logger.info("Creating dataloaders")
@@ -373,7 +373,7 @@ def main() -> None:
         case "heat":
             model = HeatUNet(1, 1)
         case "flexi":
-            model = FlexiUNet(1, 1, modes = {'down': 'diff', 'central': 'fno' , 'up': 'fno'})
+            model = FlexiUNet(1, 1, modes={"down": "diff", "central": "fno", "up": "fno"})
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     logger.info("Rendering compute graph")
@@ -387,7 +387,12 @@ def main() -> None:
     if args.weights is not None:
         logger.info(f"Loading initial weights {args.weights}")
         model = model.cpu()
-        model.load_state_dict(torch.load(args.weights, map_location="cpu"))
+        weights = torch.load(args.weights, map_location="cpu")
+        for k, v in list(weights.items()):
+            if k.startswith("_InterpolatingUNet_"):
+                weights[k[19:]] = v
+                del weights[k]
+        model.load_state_dict(weights)
     else:
         logger.info("Saving initial weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'initial.pt'}")
@@ -473,16 +478,11 @@ def main() -> None:
                     with torch.enable_grad():
                         prediction = fwd_func(input_)
                         loss = loss_function(prediction, target)
-                        loss = loss/args.accumulation_steps
-                    #optimizer.zero_grad()
-                    #loss.backward()
-                    #optimizer.step()
-                    
+                        loss = loss / args.accumulation_steps
                     loss.backward()
-                    if (batch_no + 1) % args.accumulation_steps == 0:
+                    if (batch_no + 1) % args.accumulation_steps == 0 or batch_no == len(train_dataloader) - 1:
                         optimizer.step()
                         optimizer.zero_grad()
-                        
                     with out_dir.joinpath("train-loss.csv").open("a") as file:
                         file.write(f"{epoch * len(train_dataloader) + batch_no},{loss.item()},{datetime.datetime.now().isoformat()}\n")
                     tb_logger.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + batch_no)
@@ -558,7 +558,7 @@ def main() -> None:
         logger.debug(f"    Path: {out_dir / 'model.onnx'}")
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, message=r"Converting a tensor to a Python boolean might cause the trace to be incorrect.*")
-            torch.onnx.export(model, (torch.randn((1, *exemplary_image_shape), device=args.devices[0]),), str(out_dir / "model.onnx"))
+            torch.onnx.export(model.cpu(), (torch.randn((1, *exemplary_image_shape), device="cpu"),), str(out_dir / "model.onnx"))
 
     # Test model and log test performance
     logger.info("Testing model")

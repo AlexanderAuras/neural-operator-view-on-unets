@@ -1,9 +1,9 @@
-from typing import cast
 import warnings
+from typing import cast
 
 import torch
-from torch import Tensor, nn
 import torch.utils.checkpoint
+from torch import Tensor, nn
 from typing_extensions import override
 
 from fun.models.unet_base import UNetBase
@@ -85,13 +85,11 @@ class FNOUNet(UNetBase):
 
     def __partial_forward(self, x: Tensor) -> tuple[Tensor, list[Tensor]]:
         tmp = []
-        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._down_blocks)[0])).weight.device
-        x = x.to(dev)
+        x = x.to(next(self._down_blocks.parameters()).device)
         for down_block in self._down_blocks:
             x = down_block(x)
             tmp.append(x)
-        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[nn.Module], self._central_block))).weight.device
-        x = x.to(dev)
+        x = x.to(next(self._central_block.parameters()).device)
         x = self._central_block(x)
         return x, tmp
 
@@ -103,9 +101,7 @@ class FNOUNet(UNetBase):
             raise ValueError(f"Input width must be greater than or equal to {2 ** len(self._down_blocks)}, got {x.shape[3]}")
         if x.shape[2] < 2 ** len(self._down_blocks):
             raise ValueError(f"Input height must be greater than or equal to {2 ** len(self._down_blocks)}, got {x.shape[2]}")
-        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self._down_blocks[0])[0].weight.shape)[
-            0
-        ]  # differs from CNN: CNN weight shape is out x in, FNO weight shape is in x out
+        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self._down_blocks[0])[0].weight.shape)[0]  # differs from CNN: CNN weight shape is out x in, FNO weight shape is in x out
         if x.shape[1] != allowed_input_channels:
             raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
         if x.shape[3] % 2 ** len(self._down_blocks) != 0:
@@ -180,12 +176,10 @@ class HeatUNet(UNetBase):
         )
 
     def __partial_forward(self, x: Tensor) -> Tensor:
-        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._down_blocks)[0])).weight.device
-        x = x.to(dev)
+        x = x.to(next(self._down_blocks.parameters()).device)
         for down_block in self._down_blocks:
             x = down_block(x)
-        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[nn.Module], self._central_block))).weight.device
-        x = x.to(dev)
+        x = x.to(next(self._central_block.parameters()).device)
         x = self._central_block(x)
         return x
 
@@ -197,9 +191,7 @@ class HeatUNet(UNetBase):
             raise ValueError(f"Input width must be greater than or equal to {2 ** len(self._down_blocks)}, got {x.shape[3]}")
         if x.shape[2] < 2 ** len(self._down_blocks):
             raise ValueError(f"Input height must be greater than or equal to {2 ** len(self._down_blocks)}, got {x.shape[2]}")
-        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self._down_blocks[0])[0].weight.shape)[
-            0
-        ]  # differs from CNN: CNN weight shape is out x in, FNO weight shape is in x out
+        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self._down_blocks[0])[0].weight.shape)[0]  # differs from CNN: CNN weight shape is out x in, FNO weight shape is in x out
         if x.shape[1] != allowed_input_channels:
             raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
         if x.shape[3] % 2 ** len(self._down_blocks) != 0:

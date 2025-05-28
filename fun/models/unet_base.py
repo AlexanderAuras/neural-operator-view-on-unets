@@ -2,8 +2,8 @@ from abc import ABC
 from typing import Self, cast
 
 import torch
-from torch import Tensor, nn
 import torch.utils.checkpoint
+from torch import Tensor, nn
 from typing_extensions import override
 
 
@@ -40,13 +40,11 @@ class UNetBase(nn.Module, ABC):
 
     def __partial_forward(self, x: Tensor) -> tuple[Tensor, list[Tensor]]:
         tmp = []
-        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._down_blocks)[0])).weight.device
-        x = x.to(dev)
+        x = x.to(next(self._down_blocks.parameters()).device)
         for down_block in self._down_blocks:
             x = down_block(x)
             tmp.append(x)
-        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[nn.Module], self._central_block))).weight.device
-        x = x.to(dev)
+        x = x.to(next(self._central_block.parameters()).device)
         x = self._central_block(x)
         return x, tmp
 
@@ -63,8 +61,7 @@ class UNetBase(nn.Module, ABC):
             raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
         if x.shape[3] % 2 ** len(self._down_blocks) != 0:
             raise ValueError(
-                f"Input width is not divisible by {2 ** len(self._down_blocks)}, got {x.shape[3]}"
-                + f" ({x.shape[3]} / {2 ** len(self._down_blocks)} = {x.shape[3] / 2 ** len(self._down_blocks)})."
+                f"Input width is not divisible by {2 ** len(self._down_blocks)}, got {x.shape[3]}" + f" ({x.shape[3]} / {2 ** len(self._down_blocks)} = {x.shape[3] / 2 ** len(self._down_blocks)})."
             )
         orig_device = x.device
         if self._use_checkpointing:

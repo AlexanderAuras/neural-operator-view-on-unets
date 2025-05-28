@@ -1,27 +1,36 @@
+import logging
+from typing import Literal
+
 import torch
-from torch import nn, tensor, Tensor
+from torch import Tensor, nn, tensor
 import torch.nn.functional as F
 from typing_extensions import override
 
 from fun.models.unet_base import UNetBase
 from fun.utils.fno_utils import SpectralConv2d_memory as SpectralConv2d
 
+
 ## SPECIAL LAYERS #############################################################################################################################
 ###############################################################################################################################################
 ###############################################################################################################################################
 
-class easyDiffs(nn.Module):
 
-    def __init__(self):
+class EasyDiffs(nn.Module):
+    def __init__(self) -> None:
         super().__init__()
-        self.weight= nn.Parameter(tensor([[[[0.,0.,0.],[1.,-1.,0],[0.,0.,0.]]], [[[0.,1.,0.],[0.,-1.,0],[0.,0.,0.]]]]), requires_grad = False)
+        self.weight = nn.Parameter(tensor([[[[0.0, 0.0, 0.0], [1.0, -1.0, 0], [0.0, 0.0, 0.0]]], [[[0.0, 1.0, 0.0], [0.0, -1.0, 0], [0.0, 0.0, 0.0]]]]), requires_grad=False)
 
-    def forward(self, x):
+    @override
+    def forward(self, x: Tensor) -> Tensor:
         groups = x.shape[1]
         return torch.concat(
-            [conv2d(x, self.weight[0:1].expand(groups,-1,-1,-1), groups = groups, bias=None, stride=1, padding=1),
-             conv2d(x, self.weight[1:].expand(groups,-1,-1,-1), groups = groups, bias = None, stride=1, padding=1)],
-            dim = 1)
+            [
+                F.conv2d(x, self.weight[0:1].expand(groups, -1, -1, -1), groups=groups, bias=None, stride=1, padding=1),
+                F.conv2d(x, self.weight[1:].expand(groups, -1, -1, -1), groups=groups, bias=None, stride=1, padding=1),
+            ],
+            dim=1,
+        )
+
 
 ## Adapted from: https://github.com/neuraloperator/neuraloperator/blob/main/neuralop/layers/differential_conv.py#L86
 class DiffConv2d(nn.Module):
@@ -59,84 +68,82 @@ class DiffConv2d(nn.Module):
 ###############################################################################################################################################
 
 
-
 ## Functions to create special layers #########################################################################################################
 ###############################################################################################################################################
 ###############################################################################################################################################
-def classicLayer(in_channels, out_channels, level = 0):
+def create_classic_layer(in_channels: int, out_channels: int, level: int = 0) -> nn.Conv2d:
     return nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
 
-def fnoLayer(in_channels, out_channels, level = 0):
+
+def create_fno_layer(in_channels: int, out_channels: int, level: int = 0) -> SpectralConv2d:
     kbase1 = 64
     kbase2 = 64
-    return SpectralConv2d(in_channels, out_channels, ksize1=kbase1//(2**level), ksize2=kbase2//(2**level))
+    return SpectralConv2d(in_channels, out_channels, ksize1=kbase1 // (2**level), ksize2=kbase2 // (2**level))
 
-def finiteDiffLayer(in_channels, out_channels, level=0):
-    return nn.Sequential(easyDiffs(), nn.Conv2d(in_channels*2, out_channels, kernel_size=1))
 
-def diffLayer(in_channels, out_channels, level = 0):
+def create_finite_diff_layer(in_channels: int, out_channels: int, level: int = 0) -> nn.Sequential:
+    return nn.Sequential(EasyDiffs(), nn.Conv2d(in_channels * 2, out_channels, kernel_size=1))
+
+
+def create_diff_layer(in_channels: int, out_channels: int, level: int = 0) -> DiffConv2d:
     kernel_size = 3
     padding = 1
     zero_mean = True
     scale = True
     return DiffConv2d(in_channels, out_channels, kernel_size, padding, zero_mean, scale)
 
+
 ###############################################################################################################################################
 ###############################################################################################################################################
 
 
-modedict = {'classic': classicLayer, 'fno': fnoLayer, 'findiff': finiteDiffLayer, 'diff': diffLayer}
-
-def createBlock(base_channels: int,
-        updown,
-        mode,
-        level: int = 0,
-        in_channels = None,
-        out_channels = None):
-
-    if updown == 'first':
+def create_block(
+    base_channels: int,
+    updown: Literal["first", "last", "down", "up", "central"],
+    mode: Literal["classic", "fno", "findiff", "diff"],
+    level: int = 0,
+    in_channels: int | None = None,
+    out_channels: int | None = None,
+) -> nn.Sequential:
+    modedict = {"classic": create_classic_layer, "fno": create_fno_layer, "findiff": create_finite_diff_layer, "diff": create_diff_layer}
+    if updown == "first":
         if in_channels is None:
             in_channels = base_channels
-            print('No in_channels specified, using in_channels = base_channels')    
+            logging.getLogger(__name__).warning("No in_channels specified, using in_channels = base_channels")
         return nn.Sequential(
-                    modedict[mode](in_channels, base_channels, level),
-                    nn.ReLU(),
-                    modedict[mode](base_channels, base_channels, level),
-                    nn.ReLU(),
-                )
-        
-    elif updown == 'last':
+            modedict[mode](in_channels, base_channels, level),
+            nn.ReLU(),
+            modedict[mode](base_channels, base_channels, level),
+            nn.ReLU(),
+        )
+    elif updown == "last":
         if out_channels is None:
             out_channels = base_channels
-            print('No out_channels specified, using out_channels = base_channels')
+            logging.getLogger(__name__).warning("No out_channels specified, using out_channels = base_channels")
         return nn.Sequential(
-                    modedict[mode](base_channels*2, base_channels, level),
-                    nn.ReLU(),
-                    modedict[mode](base_channels, base_channels, level),
-                    nn.ReLU(),
-                    nn.Conv2d(base_channels, out_channels, kernel_size=1),
+            modedict[mode](base_channels * 2, base_channels, level),
+            nn.ReLU(),
+            modedict[mode](base_channels, base_channels, level),
+            nn.ReLU(),
+            nn.Conv2d(base_channels, out_channels, kernel_size=1),
         )
-
-    elif updown == 'down':
+    elif updown == "down":
         return nn.Sequential(
-                    nn.MaxPool2d(2),
-                    modedict[mode](base_channels * 2 ** (level - 1), base_channels * 2**level, level),
-                    nn.ReLU(),
-                    modedict[mode](base_channels * 2**level, base_channels * 2**level, level),
-                    nn.ReLU(),
+            nn.MaxPool2d(2),
+            modedict[mode](base_channels * 2 ** (level - 1), base_channels * 2**level, level),
+            nn.ReLU(),
+            modedict[mode](base_channels * 2**level, base_channels * 2**level, level),
+            nn.ReLU(),
         )
-
-    elif updown == 'up':
+    elif updown == "up":
         return nn.Sequential(
-                    modedict[mode](base_channels * 2 ** (level + 1), base_channels * 2**level, level),
-                    nn.ReLU(),
-                    modedict[mode](base_channels * 2**level, base_channels * 2**level, level),
-                    nn.ReLU(),
-                    nn.ConvTranspose2d(base_channels * 2**level, base_channels * 2 ** (level - 1), kernel_size=2, stride=2),
-
+            modedict[mode](base_channels * 2 ** (level + 1), base_channels * 2**level, level),
+            nn.ReLU(),
+            modedict[mode](base_channels * 2**level, base_channels * 2**level, level),
+            nn.ReLU(),
+            nn.ConvTranspose2d(base_channels * 2**level, base_channels * 2 ** (level - 1), kernel_size=2, stride=2),
         )
-
-    elif updown == 'central': 
+    elif updown == "central":
         return nn.Sequential(
             nn.MaxPool2d(2),
             modedict[mode](base_channels * 2 ** (level - 1), base_channels * 2**level, level),
@@ -145,7 +152,8 @@ def createBlock(base_channels: int,
             nn.ReLU(),
             nn.ConvTranspose2d(base_channels * 2**level, base_channels * 2 ** (level - 1), kernel_size=2, stride=2),
         )
-                
+
+
 class FlexiUNet(UNetBase):
     """
     An implementation of the classic U-Net architecture.
@@ -159,7 +167,7 @@ class FlexiUNet(UNetBase):
         out_channels: int,
         depth: int = 4,
         base_channels: int = 64,
-        modes = {'down': 'classic', 'central':'classic', 'up':'classic'}
+        modes: dict[Literal["down", "central", "up"], Literal["classic", "fno", "findiff", "diff"]] | None = None,
     ) -> None:
         """
         Args:
@@ -169,24 +177,14 @@ class FlexiUNet(UNetBase):
             base_channels: The number of channels to convolve the input to in the first block.
         """
         super().__init__(in_channels, out_channels, depth, base_channels)
-
+        if modes is None:
+            modes = {"down": "classic", "central": "classic", "up": "classic"}
         self._down_blocks = nn.ModuleList(
-            [
-                createBlock(base_channels, updown = 'first', mode = modes['down'], in_channels = in_channels)
-            ]
-            + [
-                createBlock(base_channels, updown = 'down', mode = modes['down'], level = i) 
-                for i in range(1, depth)
-            ]
+            [create_block(base_channels, updown="first", mode=modes["down"], in_channels=in_channels)]
+            + [create_block(base_channels, updown="down", mode=modes["down"], level=i) for i in range(1, depth)]
         )
-        self._central_block = createBlock(base_channels, updown = 'central', mode = modes['central'], level = depth
-        )
+        self._central_block = create_block(base_channels, updown="central", mode=modes["central"], level=depth)
         self._up_blocks = nn.ModuleList(
-            [
-                createBlock(base_channels, updown = 'up', mode = modes['up'], level = i)
-                for i in range(depth - 1, 0, -1)
-            ]
-            + [
-                createBlock(base_channels, updown = 'last', mode = modes['up'], out_channels = out_channels)
-            ]
+            [create_block(base_channels, updown="up", mode=modes["up"], level=i) for i in range(depth - 1, 0, -1)]
+            + [create_block(base_channels, updown="last", mode=modes["up"], out_channels=out_channels)]
         )
