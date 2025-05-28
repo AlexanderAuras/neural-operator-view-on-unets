@@ -1,29 +1,29 @@
 import argparse
-from contextlib import redirect_stderr, redirect_stdout
 import datetime
 import logging
 import logging.config
-from math import ceil
 import os
-from pathlib import Path
 import random
 import shutil
 import sys
-from typing import cast
 import warnings
 import zipfile
+from contextlib import redirect_stderr, redirect_stdout
+from math import ceil
+from pathlib import Path
+from typing import cast
 
 import numpy as np
 import PIL.Image as Image
 import randomname
 import torch
-from torch import Tensor, nn
 import torch.backends.cudnn
 import torch.utils.data
-from torch.utils.data import DataLoader
 import torch.utils.tensorboard
 import torchinfo
 import torchview
+from torch import Tensor, nn
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm, trange
 
 from fun.data.ct_dataset import CTPostProcessDataset
@@ -34,7 +34,6 @@ from fun.models.dncnn import DnCNN
 from fun.models.flexi_unet import FlexiUNet
 from fun.models.fno_unet import FNOUNet, HeatUNet
 from fun.models.interp_unet import InterpolatingUNet
-
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
 BASE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -85,6 +84,7 @@ def main() -> None:
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
     argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "fno", "heat", "flexi"], required=True)
+    argparser.add_argument("--flexi-modes", nargs="+", choices=["classic", "fno", "findiff", "diff", "interp"], default=["diff", "fno", "fno"])
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
     argparser.add_argument("--batch-size", type=int, default=32)
@@ -373,7 +373,7 @@ def main() -> None:
         case "heat":
             model = HeatUNet(1, 1)
         case "flexi":
-            model = FlexiUNet(1, 1, modes={"down": "diff", "central": "fno", "up": "fno"})
+            model = FlexiUNet(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     logger.info("Rendering compute graph")
