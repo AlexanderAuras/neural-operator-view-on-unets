@@ -196,7 +196,9 @@ def create_block(
             nn.ReLU(),
             modedict[mode](base_channels * 2**level, base_channels * 2**level, level),
             nn.ReLU(),
-            nn.ConvTranspose2d(base_channels * 2**level, base_channels * 2 ** (level - 1), kernel_size=2, stride=2),
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+            modedict[mode](base_channels * 2**level, base_channels * 2**(level-1), level-1)
+
         )
     elif updown == "central":
         return nn.Sequential(
@@ -205,7 +207,9 @@ def create_block(
             nn.ReLU(),
             modedict[mode](base_channels * 2**level, base_channels * 2**level, level),
             nn.ReLU(),
-            nn.ConvTranspose2d(base_channels * 2**level, base_channels * 2 ** (level - 1), kernel_size=2, stride=2),
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+            modedict[mode](base_channels * 2**level, base_channels * 2**(level-1), level-1)
+
         )
 
 
