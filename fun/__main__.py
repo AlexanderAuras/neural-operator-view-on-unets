@@ -554,11 +554,12 @@ def main() -> None:
         logger.info("Saving final weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
         torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
-        logger.info("Exporting weights to ONNX")
-        logger.debug(f"    Path: {out_dir / 'model.onnx'}")
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=UserWarning, message=r"Converting a tensor to a Python boolean might cause the trace to be incorrect.*")
-            torch.onnx.export(model.cpu(), (torch.randn((1, *exemplary_image_shape), device="cpu"),), str(out_dir / "model.onnx"))
+        if args.model != 'fno' and args.model != 'flexi' and args.model != 'heat':
+            logger.info("Exporting weights to ONNX")
+            logger.debug(f"    Path: {out_dir / 'model.onnx'}")
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning, message=r"Converting a tensor to a Python boolean might cause the trace to be incorrect.*")
+                torch.onnx.export(model.cpu(), (torch.randn((1, *exemplary_image_shape), device="cpu"),), str(out_dir / "model.onnx"))
 
     # Test model and log test performance
     logger.info("Testing model")
