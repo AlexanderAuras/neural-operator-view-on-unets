@@ -203,8 +203,7 @@ class HeatUNet(UNetBase):
             x = cast(Tensor, torch.utils.checkpoint.checkpoint(self.__partial_forward, x, use_reentrant=False))
         else:
             x = self.__partial_forward(x)
-        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._up_blocks)[0])).weight.device
-        x = x.to(dev)
+        x = x.to(next(self._up_blocks.parameters()).device)
         for _, up_block in enumerate(self._up_blocks):
             x = up_block(x)
         return x.to(orig_device)
