@@ -11,7 +11,6 @@ import torch.nn as nn
 import torch.nn.functional as tf
 from typing_extensions import override
 
-
 def rfftshift(x: Tensor) -> Tensor:
     """Returns a shifted version of a matrix obtained by torch.fft.rfft2(x), i.e. the left half of torch.fft.fftshift(torch.fft.fft2(x))"""
     # Real FT shifting thus consists of two steps: 1d-Shifting the last dimension and flipping in second to last dimension and taking the complex conjugate,
@@ -30,16 +29,15 @@ def symmetric_padding(xf_old: Tensor, im_shape_old: npt.NDArray[np.int_], im_sha
     add_shape = np.array(xf_old.shape[:-2])  # [batchsize, channels]
 
     ft_height_old = im_shape_old[-2] + (1 - im_shape_old[-2] % 2)  # always odd
-    ft_width_old = im_shape_old[-1] // 2 + 1  # always odd
+    ft_width_old = im_shape_old[-1] // 2 + 1 
     ft_height_new = im_shape_new[-2] + (1 - im_shape_new[-2] % 2)  # always odd
-    ft_width_new = im_shape_new[-1] // 2 + 1  # always odd
+    ft_width_new = im_shape_new[-1] // 2 + 1  
     xf_shape = tuple(add_shape) + (ft_height_old, ft_width_old)  # shape for the unpadded trafo array
 
     pad_height = (ft_height_new - ft_height_old) // 2  # the difference between both ft shapes is always even
     pad_width = ft_width_new - ft_width_old
     pad_list = [pad_width, 0, pad_height, pad_height]  #'starting from the last dimension and moving forward, (padding_left,padding_right, padding_top,padding_bottom)'
     xf = torch.zeros(size=xf_shape, dtype=torch.cfloat, device=xf_old.device)
-
     xf[..., : im_shape_old[-2], :] = xf_old  # for odd dimensions, this already represents a set of Herm.sym. coefficients
 
     # for even dimensions, the coefficients corresponding to the nyquist frequency are split symmetrically
@@ -63,6 +61,37 @@ def symmetric_padding(xf_old: Tensor, im_shape_old: npt.NDArray[np.int_], im_sha
 
     return xf_pad[..., : im_shape_new[-2], :]
 
+# Complex multiplication (from https://github.com/zongyi-li/fourier_neural_operator/blob/master/fourier_2d.py)
+def compl_mul2d(input: Tensor, weight: Tensor) -> Tensor:
+    # (batch, in_channel, x,y ), (in_channel, out_channel, x,y) -> (batch, out_channel, x,y)
+    return torch.einsum("bixy,ioxy->boxy", input, weight)
+
+# Convolution with 0-padding of kernel in spectral domain
+def spectral_conv2d(x, kernel, kernel_shape, norm, groups = 1):
+    assert kernel.shape[1]%groups == 0, "output shape, i.e., kernel.shape[1] = "+ str(kernel.shape[1])+" is not a multiple of groups = "+str(groups)
+    in_size = kernel.shape[0]
+    out_size = kernel.shape[1]//groups
+    output = torch.concat([spectral_conv2d_nogroup(x[:,i*in_size:(i+1)*in_size], kernel[:,i*out_size:(i+1)*out_size], kernel_shape, norm) for i in range(groups)], dim = 1)
+
+    return output
+
+def spectral_conv2d_nogroup(x, kernel, kernel_shape, norm):
+    x_shape = np.array(x.shape[-2:])
+
+    compute_shape = np.min([x_shape, kernel_shape], axis=1)
+    # adapt the weight parameters to input dimension by trigonometric interpolation (to odd dimension)
+    multiplier_padded = symmetric_padding(kernel, kernel_shape, compute_shape + (1 - compute_shape % 2))
+
+    # For even input dimensions we interpolate to the next higher odd dimension
+    # this could be optimized by checking dimensions first
+    x_ft_padded = symmetric_padding(rfftshift(fft.rfft2(x, norm=norm)), x_shape, compute_shape + (1 - compute_shape % 2))
+
+    # Elementwise multiplication of rfft-coefficients and return to physical space after correcting dimension with symmetric padding if desired dimension is even
+    output = fft.irfft2(
+        irfftshift(symmetric_padding(compl_mul2d(x_ft_padded, multiplier_padded), compute_shape + (1 - compute_shape % 2), x_shape)), norm=norm, s=tuple(x_shape)
+    )
+
+    return output
 
 class TrigonometricResize_2d:
     """Resize 2d image with trigonometric interpolation"""
@@ -119,292 +148,13 @@ class SpectralConv2d_memory(nn.Module):
         self.ksize2 = 2 * (weight.shape[-1] - 1) + self.odd
         self.weight = nn.Parameter(weight.clone())
 
-    # Complex multiplication (original)
-    def compl_mul2d(self, input: Tensor, weight: Tensor) -> Tensor:
-        # (batch, in_channel, x,y ), (in_channel, out_channel, x,y) -> (batch, out_channel, x,y)
-        return torch.einsum("bixy,ioxy->boxy", input, weight)
-
     @override
     def forward(self, x: Tensor) -> Tensor:
-        x_shape = np.array(x.shape[-2:])
         kernel_shape = np.array([self.ksize1, self.ksize2])
-
-        compute_shape = np.min([x_shape, kernel_shape], axis=1)
-
-        # adapt the weight parameters to input dimension by trigonometric interpolation (to odd dimension)
-        multiplier_padded = symmetric_padding(self.weight, kernel_shape, compute_shape + (1 - compute_shape % 2))
-
-        # For even input dimensions we interpolate to the next higher odd dimension
-        # this could be optimized by checking dimensions first
-        x_ft_padded = symmetric_padding(rfftshift(fft.rfft2(x, norm=self.norm)), x_shape, compute_shape + (1 - compute_shape % 2))
-
-        # Elementwise multiplication of rfft-coefficients and return to physical space after correcting dimension with symmetric padding if desired dimension is even
-        output = fft.irfft2(
-            irfftshift(symmetric_padding(self.compl_mul2d(x_ft_padded, multiplier_padded), compute_shape + (1 - compute_shape % 2), x_shape)), norm=self.norm, s=tuple(x_shape)
-        )
-
+        output = spectral_conv2d(x, self.weight, kernel_shape, norm = self.norm)
         return output
 
     @override
     def extra_repr(self):
         s = "{in_channels}, {out_channels}, {ksize1}, {ksize2}"
         return s.format(**self.__dict__)
-
-
-# This is a modified version of https://github.com/zongyi-li/fourier_neural_operator/blob/master/fourier_2d.py
-# Modifications and additions are as follows:
-# - additional parameter 'weight' = None or tensor of in_channels x out_channels x ksize1 x ksize2: if not None, the spectral weights are set according to the passed argument
-# - additional parameter 'out_shape' = [int, int]: determines height and width of output. If not chosen, output shape will be the same as input shape. If fixed and norm='forward',
-#   FNO-behavior is equivalent to CNN-behavior for trigonometrically interpolated inputs.
-# - additional parameter 'in_shape' = [int, int]: determines the image dimension that corresponds to the parameters.
-# - additional parameter 'parameterization' = {'spectral', 'spatial'}: determines wether the optimization is done in spectral (original) or spatial (addition) domain
-# - additional parameters 'ksize1' & 'ksize2': determines kernel height and width and substitutes 'modes1' and 'modes2'. This makes it possible to use even-dimensional parameters.
-#   Only necessary if 'weight' is None.
-# - additional parameters 'stride' = [int,int], 'strided_trigo' = {True, False}: determines size of stride and if the dimensionality reduction is done by conventional striding
-#   (strided_trigo = False) or downsizing with trigonometric interpolation (strided_trigo = True)
-# - additional parameter 'norm' = {'forward', 'backward', 'ortho'}: Normalization factor used for fft-functions. If out_shape is fixed,
-#   it is recommended to use 'forward' to be interpolation-equivariant w.r.t. trigonometric interpolation
-# - additional parameter 'odd' = {True, False}: Specifies the oddity of the width of the spectral kernel, since this is not clear from the rfft-representation.
-# - additional parameter 'conv_like_cnn': Should be True if parameters are taken from a standard CNN-layer with even-dimensional kernel or
-#   even-dimensional (training) inputs to resemble CNN-behavior
-# - changes in parametrization: spectral parameters are now stored in one tensor (corresponds to a shifted version of the split parametrization in original code)
-# - functional changes: behavior for even dimensions is now in accordance to trigonometric interpolation of real-valued functions
-class SpectralConv2d(nn.Module):
-    """2D spectral convolution layer
-
-    Args:
-        in_channels (int): number of input channels
-        out_channels (int): number of output channels
-        weight (tensor): spectral weights of shape (in_channels, out_channels, ksize1, ksize2)
-        out_shape (list): determines height and width of output. If not chosen, output shape will be the same as input shape
-        in_shape (list): determines the image dimension that corresponds to the parameters
-        parametrization (str): determines wether the optimization is done in spectral or spatial domain
-        ksize1 (int): determines kernel height
-        ksize2 (int): determines kernel width
-        stride (list): determines size of stride
-        strided_trigo (bool): determines if the dimensionality reduction is done by conventional striding or downsizing with trigonometric interpolation
-        norm (str): Normalization factor used for fft-functions
-        odd (bool): Specifies the oddity of the width of the spectral kernel, since this is not clear from the rfft-representation
-        conv_like_cnn (bool): If True resembles CNN-behavior for a certain resolution
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        weight: Tensor | None = None,
-        out_shape: npt.NDArray[np.int_] | None = None,
-        in_shape: npt.NDArray[np.int_] | None = None,
-        parametrization: Literal["spatial", "spectral"] = "spectral",
-        ksize1: int = 1,
-        ksize2: int = 1,
-        stride: npt.NDArray[np.int_] | tuple[int, ...] = (1, 1),
-        stride_trigo: bool = False,
-        norm: Literal["forward", "backward", "ortho"] = "forward",
-        odd: bool = True,
-        conv_like_cnn: bool = False,
-    ) -> None:
-        super(SpectralConv2d, self).__init__()
-
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.out_shape = out_shape
-        self.in_shape = in_shape
-        self.parametrization = parametrization
-        self.stride = stride
-        self.norm = norm
-        self.odd = odd
-        self.conv_like_cnn = conv_like_cnn
-        self.stride_trigo = stride_trigo
-        im_factor = 1
-
-        # Initialize weight according to chosen parametrization
-        if parametrization == "spectral":
-            if in_shape is not None:
-                if norm == "forward":
-                    im_factor = np.prod(in_shape)
-                elif norm == "ortho":
-                    im_factor = np.sqrt(np.prod(in_shape))
-
-            if weight is None:
-                self.scale = 1 / (in_channels * out_channels)
-
-                weight = torch.rand(in_channels, out_channels, ksize1, ksize2 // 2 + 1, dtype=torch.cfloat)
-                weight = self.scale * (weight)
-
-                self.odd = ksize2 % 2
-                weight[:, :, 0, 0].imag = cast(Tensor, 0.0)
-            self.ksize1 = weight.shape[-2]
-            # self.ksize2 = weight.shape[-1]*2 - (2 - self.odd)
-            self.ksize2 = 2 * (weight.shape[-1] - 1) + self.odd
-        elif parametrization == "spatial":
-            if in_shape is None:
-                im_factor = 1
-            else:
-                # if norm == 'forward':
-                # im_factor = np.prod(in_shape)
-                im_factor = 1
-
-            self.scale = 1 / (in_channels * ksize1 * ksize2)
-
-            if weight is None:
-                weight = im_factor * np.sqrt(self.scale) * 2 * (torch.rand(in_channels, out_channels, ksize1, ksize2) - 0.5)
-                weight = cast(Tensor, weight)
-            self.ksize1 = weight.shape[-2]
-            self.ksize2 = weight.shape[-1]
-        self.weight = nn.Parameter(weight.clone())
-
-    # Complex multiplication (original)
-    def compl_mul2d(self, input: Tensor, weight: Tensor) -> Tensor:
-        # (batch, in_channel, x,y ), (in_channel, out_channel, x,y) -> (batch, out_channel, x,y)
-        return torch.einsum("bixy,ioxy->boxy", input, weight)
-
-    @override
-    def forward(self, x: Tensor) -> Tensor:
-        x_shape = np.array(x.shape[-2:])
-
-        if self.in_shape is None:
-            im_shape_old = x_shape  # variable spatial support of kernel in case of spatial parametrization
-        else:
-            im_shape_old = np.array(self.in_shape)  # 'fixed' spatial support in case of spatial and spectral parametrization
-
-        if self.out_shape is None:
-            im_shape_new = x_shape
-        else:
-            im_shape_new = np.array(self.out_shape)
-
-        # adapt the weight parameters to input dimension by trigonometric interpolation (to odd dimension)
-        if self.parametrization == "spectral":
-            kernel_shape = np.array([self.ksize1, self.ksize2])
-            multiplier_padded = symmetric_padding(self.weight, kernel_shape, im_shape_new + (1 - im_shape_new % 2))
-        elif self.parametrization == "spatial":
-            multiplier = spatial_to_spectral(self.weight, im_shape_old, norm=cast(Literal["forward", "backward", "ortho"], self.norm), conv_like_cnn=self.conv_like_cnn)
-            # spatial zero-padding to match image shape, then ifftshift to align center, then rfft2 and rfftshift to get multiplier,
-            # maybe this can be optimized by using the 's' parameter for rfft2
-            multiplier_padded = symmetric_padding(multiplier, im_shape_old, im_shape_new + (1 - im_shape_new % 2))
-        else:
-            raise ValueError("parametrization must be 'spectral' or 'spatial'")
-
-        # For even input dimensions we interpolate to the next higher odd dimension
-        # this could be optimized by checking dimensions first
-        x_ft_padded = symmetric_padding(rfftshift(fft.rfft2(x, norm=self.norm)), x_shape, im_shape_new + (1 - im_shape_new % 2))
-
-        # Elementwise multiplication of rfft-coefficients and return to physical space after correcting dimension with symmetric padding if desired dimension is even
-        output = fft.irfft2(
-            irfftshift(symmetric_padding(self.compl_mul2d(x_ft_padded, multiplier_padded), im_shape_new + (1 - im_shape_new % 2), im_shape_new)),
-            norm=self.norm,
-            s=tuple(im_shape_new),
-        )
-        # dimension reduction by trigonometric interpolation or conventional striding (not resolution invariant)
-        if sum(self.stride) > 1:
-            if self.stride_trigo:
-                stride_size = [int(np.ceil(im_shape_new[0] / self.stride[0])), int(np.ceil(im_shape_new[1] / self.stride[1]))]
-                output = TrigonometricResize_2d((stride_size[0], stride_size[1]))(output)
-            else:
-                output = output[..., 0 :: self.stride[0], 0 :: self.stride[1]]
-
-        return output
-
-    @override
-    def extra_repr(self):
-        s = "{in_channels}, {out_channels}, kernel_size={ksize1}, stride={stride}"
-        return s.format(**self.__dict__)
-
-
-def spatial_to_spectral(
-    weight: Tensor,
-    im_shape: npt.NDArray[np.int_],
-    norm: Literal["forward", "backward", "ortho"] = "forward",
-    conv_like_cnn: bool = False,
-    ksize: npt.NDArray[np.int_] | None = None,
-):
-    weight = weight.clone()
-    kernel_shape = np.array([weight.shape[-2], weight.shape[-1]])
-    shape_diff = im_shape - kernel_shape
-    pad = np.sign(shape_diff) * np.abs(shape_diff) // 2
-    odd_bias = np.abs(shape_diff) % 2
-    oddity_old = kernel_shape % 2
-    pad_list = [
-        pad[-1] + odd_bias[-1] * oddity_old[-1],
-        pad[-1] + odd_bias[-1] * (1 - oddity_old[-1]),
-        pad[-2] + odd_bias[-2] * oddity_old[-2],
-        pad[-2] + odd_bias[-2] * (1 - oddity_old[-2]),
-    ]  # starting from the last dimension and moving forward, (padding_left,padding_right, padding_top,padding_bottom)'
-
-    spectral_weight = rfftshift(fft.rfft2(fft.ifftshift(tf.pad(weight, pad_list), dim=[-2, -1]), norm=norm))
-
-    # the discrete approximation of continuous convolution in spatial domain differs from the spectral implementation for even dimensions, if conv_like_cnn, we use spatial approach
-    if conv_like_cnn:
-        if im_shape[-2] % 2 == 0:
-            spectral_weight[..., 0, :] *= 2
-        if im_shape[-1] % 2 == 0:
-            spectral_weight[..., :, 0] *= 2
-
-    if ksize is not None:
-        ksize = np.array(ksize)
-
-        spectral_weight = symmetric_padding(spectral_weight, im_shape, ksize)
-    return spectral_weight
-
-
-def spectral_to_spatial(
-    weight: Tensor, im_shape: npt.NDArray[np.int_], odd: bool = True, norm: Literal["forward", "backward", "ortho"] = "forward", conv_like_cnn: bool = False
-) -> Tensor:
-    weight = weight.clone()
-    # maybe this doesn't work yet
-    if conv_like_cnn:
-        if im_shape[-2] % 2 == 0:
-            weight[..., 0, :] *= 0.5
-        if im_shape[-1] % 2 == 0:
-            weight[..., :, 0] *= 0.5
-
-    ksize2 = weight.shape[-1] * 2 - (2 - odd)  # odd = True: n*2 - 1; odd = False: n*2 - 2
-
-    kernel_shape = np.array([weight.shape[-2], ksize2])
-    multiplier_padded = symmetric_padding(weight, kernel_shape, im_shape)
-
-    return fft.fftshift(fft.irfft2(irfftshift(multiplier_padded), s=tuple(im_shape), norm=norm), dim=[-2, -1])
-
-
-def conv_to_spectral(
-    conv: nn.Conv2d,
-    im_shape: npt.NDArray[np.int_],
-    parametrization: Literal["spectral", "spatial"] = "spectral",
-    norm: Literal["forward", "backward", "ortho"] = "forward",
-    in_shape: npt.NDArray[np.int_] | None = None,
-    out_shape: npt.NDArray[np.int_] | None = None,
-    conv_like_cnn: bool = True,
-    ksize: npt.NDArray[np.int_] | None = None,
-    stride_trigo: bool = False,
-    stride: npt.NDArray[np.int_] | tuple[int, ...] | None = None,
-) -> SpectralConv2d:
-    im_shape = np.array(im_shape)
-    weight = conv.weight
-    weight = torch.flip(conv.weight, dims=[-2, -1])
-    weight = torch.permute(weight, (1, 0, 2, 3))  # torch.conv2d performs a cross-correlation, i.e., convolution with flipped weight
-    if norm == "forward":
-        weight *= np.prod(im_shape)
-    elif norm == "ortho":
-        weight *= np.sqrt(np.prod(im_shape))
-
-    if parametrization == "spectral":
-        weight = spatial_to_spectral(weight, im_shape, norm=norm, conv_like_cnn=conv_like_cnn, ksize=ksize)
-
-    odd = (im_shape[-1] % 2) == 1
-
-    if stride is None:
-        stride = conv.stride
-
-    return SpectralConv2d(
-        conv.in_channels,
-        conv.out_channels,
-        parametrization=parametrization,
-        weight=weight,
-        stride=stride,
-        odd=odd,
-        in_shape=in_shape,
-        out_shape=out_shape,
-        conv_like_cnn=conv_like_cnn,
-        norm=norm,
-        stride_trigo=stride_trigo,
-    )

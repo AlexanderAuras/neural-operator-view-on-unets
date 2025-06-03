@@ -9,11 +9,40 @@ from typing_extensions import override
 
 from fun.models.unet_base import UNetBase
 from fun.utils.fno_utils import SpectralConv2d_memory as SpectralConv2d
+from fun.utils.fno_utils import spectral_conv2d
+from fun.utils.interp_utils import interp_conv2d
 
 ## SPECIAL LAYERS #############################################################################################################################
 ###############################################################################################################################################
 ###############################################################################################################################################
 
+class CombiIntegral(nn.Module):
+    def __init__(self, base_input_size) -> None:
+        super().__init__()
+        weight = torch.zeros((9,1,3,3))
+        for i in range(9):
+            weight[i,0,i//3,i%3] = 1
+        #self.integral_weight = nn.Parameter(weight, requires_grad = False)
+        self.spectral_weight = nn.Parameter(torch.fft.rfft2(weight, norm = 'forward'), requires_grad = False)
+        self.diff_weight = nn.Parameter(tensor([[[[0.0, 0.0, 0.0], [1.0, -1.0, 0], [0.0, 0.0, 0.0]]],\
+                                                [[[0.0, 1.0, 0.0], [0.0, -1.0, 0], [0.0, 0.0, 0.0]]],\
+                                                [[[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 0.0]]]]), requires_grad=False)
+        self.base_input_size = base_input_size
+        
+    @override
+    def forward(self, x:Tensor) -> Tensor:
+        groups = x.shape[1]
+        return torch.concat(
+            [
+                torch.concat([spectral_conv2d(x, self.spectral_weight[i:i+1].expand(-1, groups, -1, -1), kernel_shape = (3,3), norm = 'forward', groups = groups)\
+                              for i in range(self.spectral_weight.shape[0])], dim = 1),
+                #torch.concat([interp_conv2d(x, self.integral_weight[i:i+1].expand(groups, -1, -1, -1), self.base_input_size, groups = groups, bias = None, pad = True, padding_mode = "constant")\
+                #              for i in range(self.integral_weight.shape[0])], dim = 1),
+                torch.concat([F.conv2d(x, self.diff_weight[i:i+1].expand(groups, -1, -1, -1), groups=groups, bias=None, stride=1, padding=1)\
+                              for i in range(self.diff_weight.shape[0])], dim = 1 )
+                
+            ], dim = 1)
+        
 
 class EasyDiffs(nn.Module):
     def __init__(self) -> None:
@@ -96,20 +125,7 @@ class InterpolatingConv2d(nn.Module):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
-        assert x.ndim == 4, "Input must be 4D (N, C, H, W)"
-        assert x.shape[2] == x.shape[3], "Input must be square (H == W)"
-        assert x.shape[3] >= self.__base_input_size, f"Input size {x.shape[3]} is smaller than the valid base input size {self.__base_input_size}"
-        max_input_size = self.__max_scale_factor * self.__base_input_size
-        assert x.shape[3] <= max_input_size, f"Input size {x.shape[3]} is larger than the maximal supported input size {max_input_size}"
-        assert x.shape[3] % self.__base_input_size == 0, f"Input size {x.shape[3]} is not an integer multiple of {self.__base_input_size}"
-        scale_factor = x.shape[3] / (self.__base_input_size * self.__max_scale_factor)
-        weight = F.interpolate(self.weight, scale_factor=scale_factor, mode="bilinear", align_corners=False)
-        if self.__pad:
-            total_padding = weight.shape[-1] - 1
-            padding_start = total_padding // 2
-            padding_end = total_padding - padding_start
-            x = F.pad(x, (padding_start, padding_end, padding_start, padding_end), mode=self.__padding_mode)
-        return F.conv2d(x, weight, self.bias)
+        return interp_conv2d(x, self.weight, self.__base_input_size, bias = self.bias, pad = self.__pad, padding_mode = self.__padding_mode)
 
 
 ###############################################################################################################################################
@@ -147,6 +163,9 @@ def create_interp_layer(in_channels: int, out_channels: int, level: int = 0) -> 
     max_scale_factor = 4
     return InterpolatingConv2d(in_channels, out_channels, base_kernel_size, base_input_size // 2 ** (level), max_scale_factor, padding="same")
 
+def create_combi_layer(in_channels: int, out_channels: int, level: int = 0) -> nn.Sequential:
+    base_input_size = 64
+    return nn.Sequential(CombiIntegral(base_input_size // 2 ** (level)), nn.Conv2d(in_channels * 12, out_channels, kernel_size=1))
 
 ###############################################################################################################################################
 ###############################################################################################################################################
@@ -160,7 +179,7 @@ def create_block(
     in_channels: int | None = None,
     out_channels: int | None = None,
 ) -> nn.Sequential:
-    modedict = {"classic": create_classic_layer, "fno": create_fno_layer, "findiff": create_finite_diff_layer, "diff": create_diff_layer, "interp": create_interp_layer}
+    modedict = {"classic": create_classic_layer, "fno": create_fno_layer, "findiff": create_finite_diff_layer, "diff": create_diff_layer, "interp": create_interp_layer, "combi": create_combi_layer}
     if updown == "first":
         if in_channels is None:
             in_channels = base_channels
