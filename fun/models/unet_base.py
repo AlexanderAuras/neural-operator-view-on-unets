@@ -56,9 +56,9 @@ class UNetBase(nn.Module, ABC):
             raise ValueError(f"Input width must be greater than or equal to {2 ** len(self._down_blocks)}, got {x.shape[3]}")
         if x.shape[2] < 2 ** len(self._down_blocks):
             raise ValueError(f"Input height must be greater than or equal to {2 ** len(self._down_blocks)}, got {x.shape[2]}")
-        allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self._down_blocks[0])[0].weight.shape)[1]
-        if x.shape[1] != allowed_input_channels:
-            raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
+        #allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self._down_blocks[0])[0].weight.shape)[1]
+        #if x.shape[1] != allowed_input_channels:
+        #    raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
         if x.shape[3] % 2 ** len(self._down_blocks) != 0:
             raise ValueError(
                 f"Input width is not divisible by {2 ** len(self._down_blocks)}, got {x.shape[3]}" + f" ({x.shape[3]} / {2 ** len(self._down_blocks)} = {x.shape[3] / 2 ** len(self._down_blocks)})."
@@ -68,7 +68,7 @@ class UNetBase(nn.Module, ABC):
             x, tmp = cast(Tensor, torch.utils.checkpoint.checkpoint(self.__partial_forward, x, use_reentrant=False))
         else:
             x, tmp = self.__partial_forward(x)
-        dev = next(filter(lambda m: hasattr(m, "weight"), cast(list[list[nn.Module]], self._up_blocks)[0])).weight.device
+        dev = next(self._up_blocks.parameters()).device
         x = x.to(dev)
         tmp = [y.to(dev) for y in tmp]
         for i, up_block in enumerate(self._up_blocks):
