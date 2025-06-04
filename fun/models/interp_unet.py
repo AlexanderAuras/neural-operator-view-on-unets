@@ -47,7 +47,11 @@ class InterpolatingConv2d(nn.Module):
         assert x.shape[3] <= max_input_size, f"Input size {x.shape[3]} is larger than the maximal supported input size {max_input_size}"
         assert x.shape[3] % self.__base_input_size == 0, f"Input size {x.shape[3]} is not an integer multiple of {self.__base_input_size}"
         scale_factor = x.shape[3] / (self.__base_input_size * self.__max_scale_factor)
-        weight = F.interpolate(self.weight, scale_factor=scale_factor, mode="bilinear", align_corners=False)
+        weight = F.interpolate(self.weight, scale_factor=scale_factor, mode="bilinear", align_corners=False) / scale_factor**2
+        # TODO Read for interpolate instabilities
+        # TODO Max pool instead of interpolate
+        # TODO Other order interpolate?
+        # TODO Log grads and weights
         if self.__pad:
             total_padding = weight.shape[-1] - 1
             padding_start = total_padding // 2
