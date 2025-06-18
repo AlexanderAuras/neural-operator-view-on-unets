@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 from typing_extensions import override
-
+from torchvision.transforms import v2
 
 class EllipsesDataset(Dataset[dict[str, Tensor]]):
     def __init__(
@@ -18,6 +18,7 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
         ellipse_intensities: tuple[float, float] = (0.1, 1.0),
         normalize_intensities: bool = True,
         seed: int | None = None,
+        smooth: bool = False,
     ) -> None:
         super().__init__()
         self.__image_count = image_count
@@ -30,6 +31,9 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
         self.__ellipse_intensities = ellipse_intensities
         self.__normalize_intensities = normalize_intensities
         self.__seed = seed if seed is not None else int(torch.randint(2**32, (1,)).item())
+        self.__smooth = smooth
+        if smooth:
+            self.__blurrer = v2.GaussianBlur(kernel_size=101, sigma=(100.))
 
     def __len__(self) -> int:
         return self.__image_count
@@ -67,4 +71,6 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
             groundtruth = distances.sum(-1)
         if self.__normalize_intensities:
             groundtruth = groundtruth / (self.__ellipses_per_image * self.__ellipse_intensities[1])
+        if self.__smooth:
+            groundtruth = self.__blurrer(groundtruth.unsqueeze(0))[0]
         return {"input": groundtruth[None]}

@@ -1,6 +1,7 @@
 ### COPY of https://github.com/samirak98/FourierImaging/blob/main/fourierimaging/modules/trigoInterpolation.py
 
 from typing import Literal, cast
+import math
 
 import numpy as np
 import numpy.typing as npt
@@ -130,7 +131,7 @@ class TrigonometricResize_2d:
 
 
 class SpectralConv2d_memory(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, ksize1: int = 1, ksize2: int = 1, norm: Literal["forward", "backward", "ortho"] = "forward"):
+    def __init__(self, in_channels: int, out_channels: int, ksize1: int = 1, ksize2: int = 1, norm: Literal["forward", "backward", "ortho"] = "forward", bias: bool = True):
         super().__init__()
 
         self.in_channels = in_channels
@@ -148,10 +149,21 @@ class SpectralConv2d_memory(nn.Module):
         self.ksize2 = 2 * (weight.shape[-1] - 1) + self.odd
         self.weight = nn.Parameter(weight.clone())
 
+        self.bias = nn.Parameter(torch.empty((out_channels,1,1))) if bias else None
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)  # pyright: ignore [reportPrivateUsage]
+            if fan_in != 0:
+                bound = 1 / math.sqrt(fan_in)
+                nn.init.uniform_(self.bias, -bound, bound)
+
     @override
     def forward(self, x: Tensor) -> Tensor:
         kernel_shape = np.array([self.ksize1, self.ksize2])
         output = spectral_conv2d(x, self.weight, kernel_shape, norm = self.norm)
+        if self.bias is not None:
+            output = output + self.bias
+            
         return output
 
     @override

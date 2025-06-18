@@ -31,7 +31,7 @@ from fun.data.ellipses_dataset import EllipsesDataset
 from fun.data.multi_res_batch_sampler import MultiResolutionBatchSampler
 from fun.models.classical_unet import UNet
 from fun.models.dncnn import DnCNN
-from fun.models.flexi_unet import FlexiUNet
+from fun.models.flexi_unet import FlexiUNet, FlexiUNet_Res
 from fun.models.fno_unet import FNOUNet, HeatUNet
 from fun.models.interp_unet import InterpolatingUNet
 
@@ -71,6 +71,7 @@ def normalized(tensor: torch.Tensor) -> torch.Tensor:
 
 
 def main() -> None:
+    global BASE_DATA_DIR
     # Parse command line arguments
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--debug", action="store_true")
@@ -83,8 +84,8 @@ def main() -> None:
     argparser.add_argument("--forced-run-name", type=str, default=None)
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
-    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "fno", "heat", "flexi"], required=True)
-    argparser.add_argument("--flexi-modes", nargs="+", choices=["classic", "fno", "findiff", "diff", "interp"], default=["diff", "fno", "fno"])
+    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "fno", "heat", "flexi", "flexi_res"], required=True)
+    argparser.add_argument("--flexi-modes", nargs="+", choices=["classic", "fno", "jump", "diff", "interp", "combi"], default=["diff", "fno", "fno"])
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
     argparser.add_argument("--batch-size", type=int, default=32)
@@ -95,6 +96,7 @@ def main() -> None:
     argparser.add_argument("--noise-level", type=float, default=0.0)
     argparser.add_argument("--angle-percent", type=float, default=0.75)
     argparser.add_argument("--num-ellipses", type=int, default=10)
+    argparser.add_argument("--smooth-data", dest="smooth", action="store_true")
     args = argparser.parse_args()
 
     if args.forced_run_name is not None:
@@ -159,10 +161,12 @@ def main() -> None:
     # Load data
     logger.info("Loading data")
     logger.info("Loading datasets")
+    if args.smooth:
+        BASE_DATA_DIR = BASE_DATA_DIR / "smooth"
     match args.dataset:
         case "ellipses-64x64":
             train_dataset = CTPostProcessDataset(
-                EllipsesDataset(6400, 1024, args.num_ellipses),
+                EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
                 angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                 pos_count=128,
                 target_shape=(64, 64),
@@ -173,7 +177,7 @@ def main() -> None:
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
                 "64x64": CTPostProcessDataset(
-                    EllipsesDataset(1600, 1024, args.num_ellipses),
+                    EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                     pos_count=128,
                     target_shape=(64, 64),
@@ -190,7 +194,7 @@ def main() -> None:
             exemplary_image_shape = (1, 64, 64)
         case "ellipses-128x128":
             train_dataset = CTPostProcessDataset(
-                EllipsesDataset(6400, 1024, args.num_ellipses),
+                EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
                 angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                 pos_count=256,
                 target_shape=(128, 128),
@@ -201,7 +205,7 @@ def main() -> None:
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
                 "128x128": CTPostProcessDataset(
-                    EllipsesDataset(1600, 1024, args.num_ellipses),
+                    EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                     pos_count=256,
                     target_shape=(128, 128),
@@ -218,7 +222,7 @@ def main() -> None:
             exemplary_image_shape = (1, 128, 128)
         case "ellipses-256x256":
             train_dataset = CTPostProcessDataset(
-                EllipsesDataset(6400, 1024, args.num_ellipses),
+                EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
                 angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                 pos_count=512,
                 target_shape=(256, 256),
@@ -229,7 +233,7 @@ def main() -> None:
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
             val_datasets = {
                 "256x256": CTPostProcessDataset(
-                    EllipsesDataset(1600, 1024, args.num_ellipses),
+                    EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                     pos_count=512,
                     target_shape=(256, 256),
@@ -247,7 +251,7 @@ def main() -> None:
         case "ellipses-mixed":
             train_datasets = [
                 CTPostProcessDataset(
-                    EllipsesDataset(2133, 1024, args.num_ellipses),
+                    EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                     pos_count=128,
                     target_shape=(64, 64),
@@ -256,7 +260,7 @@ def main() -> None:
                     radon_device=args.devices[0],
                 ),
                 CTPostProcessDataset(
-                    EllipsesDataset(2133, 1024, args.num_ellipses),
+                    EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                     pos_count=256,
                     target_shape=(128, 128),
@@ -265,7 +269,7 @@ def main() -> None:
                     radon_device=args.devices[0],
                 ),
                 CTPostProcessDataset(
-                    EllipsesDataset(2133, 1024, args.num_ellipses),
+                    EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                     pos_count=512,
                     target_shape=(256, 256),
@@ -278,7 +282,7 @@ def main() -> None:
             train_batch_sampler = MultiResolutionBatchSampler([len(x) for x in train_datasets], batch_size=args.batch_size, shuffle=True, drop_incomplete=False)
             val_datasets = {
                 "64x64": CTPostProcessDataset(
-                    EllipsesDataset(533, 1024, args.num_ellipses),
+                    EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                     pos_count=128,
                     target_shape=(64, 64),
@@ -287,7 +291,7 @@ def main() -> None:
                     radon_device=args.devices[0],
                 ),
                 "128x128": CTPostProcessDataset(
-                    EllipsesDataset(533, 1024, args.num_ellipses),
+                    EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                     pos_count=256,
                     target_shape=(128, 128),
@@ -296,7 +300,7 @@ def main() -> None:
                     radon_device=args.devices[0],
                 ),
                 "256x256": CTPostProcessDataset(
-                    EllipsesDataset(533, 1024, args.num_ellipses),
+                    EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                     pos_count=512,
                     target_shape=(256, 256),
@@ -317,7 +321,7 @@ def main() -> None:
             val_datasets = {}
             test_datasets = {
                 f"{r}x{r}": CTPostProcessDataset(
-                    EllipsesDataset(200, 1024, args.num_ellipses),
+                    EllipsesDataset(200, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(4 * r * args.angle_percent)),
                     pos_count=2 * r,
                     target_shape=(r, r),
@@ -374,6 +378,8 @@ def main() -> None:
             model = HeatUNet(1, 1)
         case "flexi":
             model = FlexiUNet(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
+        case "flexi_res":
+            model = FlexiUNet_Res(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     logger.info("Rendering compute graph")
@@ -554,7 +560,7 @@ def main() -> None:
         logger.info("Saving final weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
         torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
-        if args.model != 'fno' and args.model != 'flexi' and args.model != 'heat':
+        if args.model != 'fno' and args.model != 'flexi' and args.model != 'flexi_res' and args.model != 'heat':
             logger.info("Exporting weights to ONNX")
             logger.debug(f"    Path: {out_dir / 'model.onnx'}")
             with warnings.catch_warnings():
