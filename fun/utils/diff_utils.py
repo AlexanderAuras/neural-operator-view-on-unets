@@ -19,10 +19,10 @@ class DiffConv2d(nn.Module):
         super().__init__()
         self.zero_mean = zero_mean
         self.padding = padding
-        conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, bias=bias, padding=padding)
-        self.weight = conv.weight
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, bias=bias, padding=padding)
+        self.weight = self.conv.weight
         if bias:
-            self.bias = conv.bias
+            self.bias = self.conv.bias
         else:
             self.bias = None
         self.scale = scale
@@ -34,15 +34,14 @@ class DiffConv2d(nn.Module):
         kernel_sum = torch.sum(self.weight, dim=(-2, -1), keepdim=True)
         conv_sum = F.conv2d(x, kernel_sum)
         bias = F.conv2d(x, torch.zeros_like(kernel_sum), bias = self.bias)
-        
         if self.scale:
                 grid_width = self.scale_factor/x.shape[-1]
         else:
                 grid_width = self.scale_factor
         if self.zero_mean:
-            return (conv - conv_sum) / grid_width + bias
+            return (conv - conv_sum) / grid_width + bias # K(N)x + b
         else:
-            return (conv - conv_sum) / grid_width + conv_sum + bias
+            return (conv - conv_sum) / grid_width + conv_sum + bias  # K(N)x + cx + b
         
 
 class EasyDiffs(nn.Module):
