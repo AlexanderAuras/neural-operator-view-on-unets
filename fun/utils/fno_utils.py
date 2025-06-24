@@ -1,5 +1,6 @@
 ### COPY of https://github.com/samirak98/FourierImaging/blob/main/fourierimaging/modules/trigoInterpolation.py
 
+import array
 from typing import Literal, cast
 import math
 
@@ -94,24 +95,42 @@ def spectral_conv2d_nogroup(x, kernel, kernel_shape, norm):
 
     return output
 
-class TrigonometricResize_2d:
+class TrigonometricResize_2d(nn.Module):
     """Resize 2d image with trigonometric interpolation"""
 
-    def __init__(self, shape: npt.NDArray[np.int_] | tuple[int, ...], norm: Literal["forward", "backward", "ortho"] = "forward", check_comp: bool = False) -> None:
+    def __init__(self, shape: npt.NDArray[np.int_] | tuple[int, ...], norm: Literal["forward", "backward", "ortho"] = "forward", upsample: bool = True, downsample: bool = True, check_comp: bool = False) -> None:
         super().__init__()
         self.shape = shape
         self.norm = norm
+        self.upsample = upsample # upsample == False: don't reshape if input shape is smaller than self.shape (downsampling only)
+        self.downsample = downsample # downsample == False: don't reshape if input shape is larger than self.shape (upsampling only)
         self.check_comp = check_comp
 
-    def __call__(self, x: Tensor) -> Tensor:
-        im_shape_new = np.array(self.shape)
+    def __call__(self, x: Tensor, keep_shape: bool = False) -> Tensor:
+        if keep_shape or (not self.downsample and not self.upsample):
+            return x
+        elif self.upsample and self.downsample:
+            im_shape_new = np.array(self.shape)
+        elif not self.upsample:
+            im_shape_new = np.minimum(np.array(self.shape), np.array(x.shape[-2:]))
+            keep_shape = np.min(im_shape_new == np.array(x.shape[-2:]))
+        elif not self.downsample:
+            im_shape_new = np.maximum(np.array(self.shape), np.array(x.shape[-2:]))
+            
 
         if torch.is_complex(x):  # for complex valued functions, trigonometric interpolations is done by simple zero-padding of the Fourier coefficients
             x_inter = fft.ifft2(fft.fft2(x, norm=self.norm), s=self.shape, norm=self.norm)
         else:  # for real valued functions, the coefficients have to be Hermitian symmetric
             im_shape_old = np.array(x.shape[-2:])  # this has to be saved since it cannot be uniquely obtained by rfft(x)
-            x_inter = fft.irfft2(irfftshift(symmetric_padding(rfftshift(fft.rfft2(x, norm=self.norm)), im_shape_old, im_shape_new)), s=tuple(im_shape_new), norm=self.norm)
-        return x_inter
+            try:
+                x_inter = fft.irfft2(irfftshift(symmetric_padding(rfftshift(fft.rfft2(x, norm=self.norm)), im_shape_old, im_shape_new)), s=tuple(im_shape_new), norm=self.norm)
+            except RuntimeError:
+                print(im_shape_old)
+                print(im_shape_new)
+        if not self.upsample:
+            return x_inter, keep_shape
+        else:
+            return x_inter
 
     def check_symmetry(self, x: Tensor, im_shape: npt.NDArray[np.int_] | None = None, threshold: float = 1e-5) -> None:
         ## Helper function to check Hermitian symmetry of an odd-dimensioned matrix of Fourier coefficients.

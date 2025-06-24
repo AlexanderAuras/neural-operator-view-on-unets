@@ -33,7 +33,10 @@ from fun.models.classical_unet import UNet
 from fun.models.dncnn import DnCNN
 from fun.models.flexi_unet import FlexiUNet, FlexiUNet_Res
 from fun.models.fno_unet import FNOUNet, HeatUNet
+from fun.models.spectral_unet import SpectralResUNet
 from fun.models.interp_unet import InterpolatingUNet
+
+from neuralop.models import UNO
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
 BASE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -84,8 +87,8 @@ def main() -> None:
     argparser.add_argument("--forced-run-name", type=str, default=None)
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
-    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "fno", "heat", "flexi", "flexi_res"], required=True)
-    argparser.add_argument("--flexi-modes", nargs="+", choices=["classic", "fno", "jump", "diff", "interp", "combi"], default=["diff", "fno", "fno"])
+    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "heat", "spectral", "uno"], required=True)
+    #argparser.add_argument("--flexi-modes", nargs="+", choices=["classic", "fno", "jump", "diff", "interp", "combi"], default=["diff", "fno", "fno"])
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
     argparser.add_argument("--batch-size", type=int, default=32)
@@ -309,6 +312,7 @@ def main() -> None:
                     radon_device=args.devices[0],
                 ),
             }
+            
             test_datasets = {
                 "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
                 "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
@@ -372,14 +376,18 @@ def main() -> None:
             model = DnCNN(1, use_checkpointing=args.use_checkpointing)
         case "unet-interp":
             model = InterpolatingUNet(1, 1, base_input_size=64, max_scale_factor=4, use_checkpointing=args.use_checkpointing)
-        case "fno":
-            model = FNOUNet(1, 1, use_checkpointing=args.use_checkpointing)
+        # case "fno":
+        #     model = FNOUNet(1, 1, use_checkpointing=args.use_checkpointing)
         case "heat":
             model = HeatUNet(1, 1)
-        case "flexi":
-            model = FlexiUNet(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
-        case "flexi_res":
-            model = FlexiUNet_Res(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
+        case "spectral":
+            model = SpectralResUNet(1, 1)
+        # case "flexi":
+        #     model = FlexiUNet(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
+        # case "flexi_res":
+        #     model = FlexiUNet_Res(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
+        case "uno":
+            model = UNO(1, 1, 64, n_layers = 9, uno_out_channels = [64,128,256,512,1024,512,256,128,64], uno_n_modes = [[256,256], [128,128], [64,64], [32,32], [16,16], [32,32], [64,64], [128,128], [256, 256]], uno_scalings = [[1.0,1.0],[1.0,1.0],[1.0,1.0],[1.0,1.0],[1.0,1.0],[1.0,1.0],[1.0,1.0],[1.0,1.0],[1.0,1.0]], skip = 'linear', fno_skip  = 'linear', channel_mlp_skip='linear')
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     logger.info("Rendering compute graph")
@@ -560,7 +568,7 @@ def main() -> None:
         logger.info("Saving final weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
         torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
-        if args.model != 'fno' and args.model != 'flexi' and args.model != 'flexi_res' and args.model != 'heat':
+        if args.model != 'fno' and args.model != 'heat' and args.model != 'uno' and args.model != 'spectral':
             logger.info("Exporting weights to ONNX")
             logger.debug(f"    Path: {out_dir / 'model.onnx'}")
             with warnings.catch_warnings():
