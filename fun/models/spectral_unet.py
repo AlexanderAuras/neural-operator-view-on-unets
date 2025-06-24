@@ -9,67 +9,25 @@ from typing_extensions import override
 from fun.models.unet_base import UNetBase
 from fun.utils.fno_utils import SpectralConv2d_memory as SpectralConv2d
 from fun.utils.fno_utils import TrigonometricResize_2d
+from fun.models.fno_unet import Residual_Layer
 
-
-class Residual_Layer(nn.Module):
-    def __init__(self, linear_layer: nn.Module, activation_function: nn.Module) -> None:
-        super().__init__()
-        self.linear_layer = linear_layer
-        self.activation_function = activation_function
-
-    @override
-    def forward(self, x: Tensor) -> Tensor:
-        return x + self.activation_function(self.linear_layer(x))
-
-class SpectralResUNet(UNetBase):
+class MultiDimUNet(UNetBase):
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
         depth: int = 4,
-        base_channels: int = 64,
-        use_checkpointing: bool = False,
-        kbase1: int = 256,
-        kbase2: int = 256,
-        powerbase: int = 2,
+        use_checkpointing: bool = False
     ) -> None:
-        super().__init__(in_channels, out_channels, depth, base_channels, use_checkpointing)
+        super().__init__(in_channels, out_channels, depth, use_checkpointing)
         self._depth = depth
-        self._first_block = nn.Sequential(SpectralConv2d(in_channels, base_channels, ksize1=kbase1, ksize2=kbase2),
-                    nn.ReLU())
-        
-        self._downsample_layers = nn.ModuleList(
-            [ 
-                TrigonometricResize_2d(shape = (kbase1 // (powerbase**i),kbase2 // (powerbase**i)), upsample = False)
-                for i in range(1, depth+1)
-            ]
-        )
-        
-        self._upsample_layers = nn.ModuleList(
-            [ 
-                TrigonometricResize_2d(shape = (kbase1 // (powerbase**i),kbase2 // (powerbase**i)), downsample = False)
-                for i in range(depth-1, 0, -1)
-            ]
-        )
-
-        self._down_conv_layers = nn.ModuleList(
-            [
-                Residual_Layer(SpectralConv2d(base_channels, base_channels, ksize1=kbase1 // (powerbase**i), ksize2=kbase2 // (powerbase**i)), nn.ReLU()) 
-                for i in range(1, depth)
-            ]
-        )
-
-        self._central_conv_layer = Residual_Layer(SpectralConv2d(base_channels, base_channels, ksize1=kbase1 // (powerbase**depth), ksize2=kbase2 // (powerbase**depth)), nn.ReLU())
-        
-        self._up_conv_layers = nn.ModuleList(
-            [
-                Residual_Layer(SpectralConv2d(base_channels, base_channels, ksize1=kbase1 // (powerbase**i), ksize2=kbase2 // (powerbase**i)), nn.ReLU()) 
-                for i in range(depth-1, 0, -1)
-            ]
-        )
-        self._last_block = nn.Sequential(Residual_Layer(SpectralConv2d(base_channels, base_channels, ksize1=kbase1, ksize2=kbase2), nn.ReLU()),
-                                            nn.Conv2d(base_channels, out_channels, kernel_size=1)
-                                        )
+        self._first_block = nn.Sequential()
+        self._downsample_layers = nn.ModuleList()
+        self._upsample_layers = nn.ModuleList()
+        self._down_conv_layers = nn.ModuleList()
+        self._central_conv_layer = nn.Module()
+        self._up_conv_layers = nn.ModuleList()
+        self._last_block = nn.Sequential()
 
     def __partial_forward(self, x: Tensor) -> tuple[Tensor, list[Tensor], list[Tensor]]:
         tmp = []
@@ -127,3 +85,52 @@ class SpectralResUNet(UNetBase):
         x = self._last_block(x)
 
         return x.to(orig_device)
+
+class SpectralResUNet(MultiDimUNet):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        depth: int = 4,
+        base_channels: int = 64,
+        use_checkpointing: bool = False,
+        kbase1: int = 256,
+        kbase2: int = 256,
+        powerbase: int = 2,
+    ) -> None:
+        super().__init__(in_channels, out_channels, depth, use_checkpointing)
+        self._first_block = nn.Sequential(SpectralConv2d(in_channels, base_channels, ksize1=kbase1, ksize2=kbase2),
+                    nn.ReLU())
+        
+        self._downsample_layers = nn.ModuleList(
+            [ 
+                TrigonometricResize_2d(shape = (kbase1 // (powerbase**i),kbase2 // (powerbase**i)), upsample = False)
+                for i in range(1, depth+1)
+            ]
+        )
+        
+        self._upsample_layers = nn.ModuleList(
+            [ 
+                TrigonometricResize_2d(shape = (kbase1 // (powerbase**i),kbase2 // (powerbase**i)), downsample = False)
+                for i in range(depth-1, 0, -1)
+            ]
+        )
+
+        self._down_conv_layers = nn.ModuleList(
+            [
+                Residual_Layer(SpectralConv2d(base_channels, base_channels, ksize1=kbase1 // (powerbase**i), ksize2=kbase2 // (powerbase**i)), nn.ReLU()) 
+                for i in range(1, depth)
+            ]
+        )
+
+        self._central_conv_layer = Residual_Layer(SpectralConv2d(base_channels, base_channels, ksize1=kbase1 // (powerbase**depth), ksize2=kbase2 // (powerbase**depth)), nn.ReLU())
+        
+        self._up_conv_layers = nn.ModuleList(
+            [
+                Residual_Layer(SpectralConv2d(base_channels, base_channels, ksize1=kbase1 // (powerbase**i), ksize2=kbase2 // (powerbase**i)), nn.ReLU()) 
+                for i in range(depth-1, 0, -1)
+            ]
+        )
+        self._last_block = nn.Sequential(Residual_Layer(SpectralConv2d(base_channels, base_channels, ksize1=kbase1, ksize2=kbase2), nn.ReLU()),
+                                            nn.Conv2d(base_channels, out_channels, kernel_size=1)
+                                        )
