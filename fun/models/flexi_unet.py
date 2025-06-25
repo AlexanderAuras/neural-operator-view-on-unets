@@ -7,7 +7,7 @@ from typing_extensions import override
 
 from fun.models.unet_base import UNetBase
 from fun.utils.diff_utils import DiffConv2d, EasyDiffs
-from fun.utils.fno_utils import SpectralConv2d_memory as SpectralConv2d
+from fun.utils.fno_utils import SpectralConv2d
 from fun.utils.interp_utils import InterpolatingConv2d
 
 

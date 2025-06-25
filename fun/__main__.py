@@ -34,7 +34,7 @@ from fun.models.classical_unet import UNet
 from fun.models.dncnn import DnCNN
 from fun.models.fno_unet import HeatUNet
 from fun.models.interp_unet import InterpolatingUNet
-from fun.models.spectral_unet import SpectralResUNet
+from fun.models.spectral_unet import SpectralResUNet, SpectralUNet
 
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
@@ -91,7 +91,8 @@ def main() -> None:
     argparser.add_argument("--forced-run-name", type=str, default=None)
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
-    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "heat", "spectral", "uno"], required=True)
+    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "heat", "uno", \
+                                               "specResU", "spatResU", "specRes", "spatU"], required=True)
     # argparser.add_argument("--flexi-modes", nargs="+", choices=["classic", "fno", "jump", "diff", "interp", "combi"], default=["diff", "fno", "fno"])
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
@@ -384,8 +385,14 @@ def main() -> None:
         #     model = FNOUNet(1, 1, use_checkpointing=args.use_checkpointing)
         case "heat":
             model = HeatUNet(1, 1)
-        case "spectral":
-            model = SpectralResUNet(1, 1)
+        case "specResU":
+            model = SpectralResUNet(1, 1, parametrization='spectral', u_shape = True)
+        case "specRes":
+            model = SpectralResUNet(1, 1, parametrization='spectral', u_shape = False)
+        case "spatResU":
+            model = SpectralResUNet(1, 1, parametrization='spatial', u_shape = True)
+        case "spatU":
+            model = SpectralUNet(1, 1, parametrization='spatial', u_shape = True)
         # case "flexi":
         #     model = FlexiUNet(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
         # case "flexi_res":
@@ -596,7 +603,7 @@ def main() -> None:
         logger.info("Saving final weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
         torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
-        if args.model != "fno" and args.model != "heat" and args.model != "uno" and args.model != "spectral":
+        if args.model not in ['fno', 'heat', 'uno', 'specResU', 'specRes', 'spatResU', 'spatU']:
             logger.info("Exporting weights to ONNX")
             logger.debug(f"    Path: {out_dir / 'model.onnx'}")
             with warnings.catch_warnings():
