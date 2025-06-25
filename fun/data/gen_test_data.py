@@ -26,6 +26,7 @@ def main() -> None:
     argparser.add_argument("--angle-percent", type=float, default=0.75)
     argparser.add_argument("--num-ellipses", type=int, default=10)
     argparser.add_argument("out_dir", type=Path)
+    argparser.add_argument("--smooth-data", dest="smooth", action="store_true")
     args = argparser.parse_args()
 
     logging.getLogger().setLevel(logging.DEBUG)
@@ -57,7 +58,7 @@ def main() -> None:
     logger.info("Creating datasets")
     match args.dataset:
         case "ellipses":
-            test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses)
+            test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses, smooth = args.smooth)
             test_datasets = {
                 "64x64": CTPostProcessDataset(
                     test_dataset,
