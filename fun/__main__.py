@@ -373,7 +373,7 @@ def main() -> None:
     logger.info("Creating model")
     match args.model:
         case "unet":
-            model = UNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=0)
+            model = UNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=1)
         case "dncnn":
             model = DnCNN(1, use_checkpointing=args.use_checkpointing)
         case "unet-interp":
