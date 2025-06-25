@@ -1,29 +1,29 @@
 import argparse
+from contextlib import redirect_stderr, redirect_stdout
 import datetime
 import logging
 import logging.config
+from math import ceil
 import os
+from pathlib import Path
 import random
 import shutil
 import sys
+from typing import cast
 import warnings
 import zipfile
-from contextlib import redirect_stderr, redirect_stdout
-from math import ceil
-from pathlib import Path
-from typing import cast
 
 import numpy as np
 import PIL.Image as Image
 import randomname
 import torch
+from torch import Tensor, nn
 import torch.backends.cudnn
 import torch.utils.data
+from torch.utils.data import DataLoader
 import torch.utils.tensorboard
 import torchinfo
 import torchview
-from torch import Tensor, nn
-from torch.utils.data import DataLoader
 from tqdm.auto import tqdm, trange
 
 from fun.data.ct_dataset import CTPostProcessDataset
@@ -34,6 +34,7 @@ from fun.models.dncnn import DnCNN
 from fun.models.flexi_unet import FlexiUNet
 from fun.models.fno_unet import FNOUNet, HeatUNet
 from fun.models.interp_unet import InterpolatingUNet
+
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
 BASE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -554,7 +555,7 @@ def main() -> None:
         logger.info("Saving final weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
         torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
-        if args.model != 'fno' and args.model != 'flexi' and args.model != 'heat':
+        if args.model != "fno" and args.model != "flexi" and args.model != "heat":
             logger.info("Exporting weights to ONNX")
             logger.debug(f"    Path: {out_dir / 'model.onnx'}")
             with warnings.catch_warnings():

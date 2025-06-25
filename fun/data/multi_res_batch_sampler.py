@@ -19,7 +19,9 @@ class MultiResolutionBatchSampler:
         self.__batches: list[list[int]] = []
         curr_len = 0
         for length in lengths:
-            batches = list(batched(list(range(length)), batch_size))
+            indices = list(range(length))
+            random.shuffle(indices)
+            batches = list(batched(indices, batch_size))
             if len(batches[-1]) != batch_size and drop_incomplete:
                 batches = batches[:-1]
             self.__batches.extend([[y + curr_len for y in x] for x in batches])
