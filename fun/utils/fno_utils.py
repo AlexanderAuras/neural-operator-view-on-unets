@@ -1,5 +1,6 @@
 ### COPY of https://github.com/samirak98/FourierImaging/blob/main/fourierimaging/modules/trigoInterpolation.py
 
+from collections.abc import Iterable
 import math
 from typing import Literal, cast
 
@@ -163,7 +164,7 @@ class TrigonometricResize_2d(nn.Module):
                 print("The imaginary part of the image is unusual high, norm: " + str(imag_norm) + " for old shape: " + str(im_shape))
 
 
-class SpectralConv2d_memory(nn.Module):
+class SpectralConv2d(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, ksize1: int = 1, ksize2: int = 1, norm: Literal["forward", "backward", "ortho"] = "forward", bias: bool = True):
         super().__init__()
 
@@ -182,7 +183,7 @@ class SpectralConv2d_memory(nn.Module):
         self.ksize2 = 2 * (weight.shape[-1] - 1) + self.odd
         self.weight = nn.Parameter(weight.clone())
 
-        self.bias = nn.Parameter(torch.empty((out_channels, 1, 1))) if bias else None
+        self.bias = nn.Parameter(torch.empty((out_channels,))) if bias else None
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         if self.bias is not None:
             fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)  # pyright: ignore [reportPrivateUsage]
@@ -195,7 +196,7 @@ class SpectralConv2d_memory(nn.Module):
         kernel_shape = np.array([self.ksize1, self.ksize2])
         output = spectral_conv2d(x, self.weight, kernel_shape, norm=self.norm)
         if self.bias is not None:
-            output = output + self.bias
+            output = output + self.bias[..., None, None]
 
         return output
 
@@ -203,3 +204,54 @@ class SpectralConv2d_memory(nn.Module):
     def extra_repr(self):
         s = "{in_channels}, {out_channels}, {ksize1}, {ksize2}"
         return s.format(**self.__dict__)
+
+
+def spatial_to_spectral(
+    weight: Tensor, im_shape: Iterable[int], norm: Literal["forward", "backward", "ortho"] = "forward", conv_like_cnn: bool = True, ksize: npt.NDArray[np.int32] | None = None
+) -> Tensor:
+    im_shape = np.array(im_shape)
+
+    weight = torch.flip(weight, dims=[-2, -1])
+    weight = torch.permute(weight, (1, 0, 2, 3))  # torch.conv2d performs a cross-correlation, i.e., convolution with flipped weight
+    if norm == "forward":
+        weight *= np.prod(im_shape)
+    elif norm == "ortho":
+        weight *= np.sqrt(np.prod(im_shape))
+
+    kernel_shape = np.array([weight.shape[-2], weight.shape[-1]])
+    shape_diff = im_shape - kernel_shape
+    pad = np.sign(shape_diff) * np.abs(shape_diff) // 2
+    odd_bias = np.abs(shape_diff) % 2
+    oddity_old = kernel_shape % 2
+    pad_list = [
+        pad[-1] + odd_bias[-1] * oddity_old[-1],
+        pad[-1] + odd_bias[-1] * (1 - oddity_old[-1]),
+        pad[-2] + odd_bias[-2] * oddity_old[-2],
+        pad[-2] + odd_bias[-2] * (1 - oddity_old[-2]),
+    ]  # starting from the last dimension and moving forward, (padding_left,padding_right, padding_top,padding_bottom)'
+
+    spectral_weight = rfftshift(fft.rfft2(fft.ifftshift(tf.pad(weight, pad_list), dim=[-2, -1]), norm=norm))
+
+    # the discrete approximation of continuous convolution in spatial domain differs from the spectral implementation for even dimensions, if conv_like_cnn, we use spatial approach
+    if conv_like_cnn:
+        if im_shape[-2] % 2 == 0:
+            spectral_weight[..., 0, :] *= 2
+        if im_shape[-1] % 2 == 0:
+            spectral_weight[..., :, 0] *= 2
+
+    if ksize is not None:
+        ksize = np.array(ksize)
+
+        spectral_weight = symmetric_padding(spectral_weight, im_shape, ksize)
+    return spectral_weight
+
+
+def gen_from_Conv2d(conv: nn.Module, ksize1: int, ksize2: int, norm: Literal["forward", "backward", "ortho"] = "forward") -> SpectralConv2d:
+    spatial_weight = conv.weight
+    in_channels = conv.weight.shape[1]
+    out_channels = conv.weight.shape[0]
+    bias = conv.bias is not None
+    spec_conv = SpectralConv2d(in_channels, out_channels, ksize1=ksize1, ksize2=ksize2, bias=bias)
+    spec_conv.weight = nn.Parameter(spatial_to_spectral(spatial_weight, im_shape=(ksize1, ksize2), conv_like_cnn=True))
+    spec_conv.bias = nn.Parameter(conv.bias.clone() if conv.bias is not None else torch.empty((out_channels,)))
+    return spec_conv
