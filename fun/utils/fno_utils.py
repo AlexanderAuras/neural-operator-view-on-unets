@@ -1,8 +1,7 @@
 ### COPY of https://github.com/samirak98/FourierImaging/blob/main/fourierimaging/modules/trigoInterpolation.py
 
-import array
-from typing import Literal, cast
 import math
+from typing import Literal, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -12,6 +11,7 @@ import torch.fft as fft
 import torch.nn as nn
 import torch.nn.functional as tf
 from typing_extensions import override
+
 
 def rfftshift(x: Tensor) -> Tensor:
     """Returns a shifted version of a matrix obtained by torch.fft.rfft2(x), i.e. the left half of torch.fft.fftshift(torch.fft.fft2(x))"""
@@ -31,9 +31,9 @@ def symmetric_padding(xf_old: Tensor, im_shape_old: npt.NDArray[np.int_], im_sha
     add_shape = np.array(xf_old.shape[:-2])  # [batchsize, channels]
 
     ft_height_old = im_shape_old[-2] + (1 - im_shape_old[-2] % 2)  # always odd
-    ft_width_old = im_shape_old[-1] // 2 + 1 
+    ft_width_old = im_shape_old[-1] // 2 + 1
     ft_height_new = im_shape_new[-2] + (1 - im_shape_new[-2] % 2)  # always odd
-    ft_width_new = im_shape_new[-1] // 2 + 1  
+    ft_width_new = im_shape_new[-1] // 2 + 1
     xf_shape = tuple(add_shape) + (ft_height_old, ft_width_old)  # shape for the unpadded trafo array
 
     pad_height = (ft_height_new - ft_height_old) // 2  # the difference between both ft shapes is always even
@@ -63,21 +63,26 @@ def symmetric_padding(xf_old: Tensor, im_shape_old: npt.NDArray[np.int_], im_sha
 
     return xf_pad[..., : im_shape_new[-2], :]
 
+
 # Complex multiplication (from https://github.com/zongyi-li/fourier_neural_operator/blob/master/fourier_2d.py)
 def compl_mul2d(input: Tensor, weight: Tensor) -> Tensor:
     # (batch, in_channel, x,y ), (in_channel, out_channel, x,y) -> (batch, out_channel, x,y)
     return torch.einsum("bixy,ioxy->boxy", input, weight)
 
+
 # Convolution with 0-padding of kernel in spectral domain
-def spectral_conv2d(x, kernel, kernel_shape, norm, groups = 1):
-    assert kernel.shape[1]%groups == 0, "output shape, i.e., kernel.shape[1] = "+ str(kernel.shape[1])+" is not a multiple of groups = "+str(groups)
+def spectral_conv2d(x: Tensor, kernel: Tensor, kernel_shape: npt.NDArray[np.int32], norm: Literal["forward", "backward", "ortho"], groups: int = 1) -> Tensor:
+    assert kernel.shape[1] % groups == 0, "output shape, i.e., kernel.shape[1] = " + str(kernel.shape[1]) + " is not a multiple of groups = " + str(groups)
     in_size = kernel.shape[0]
-    out_size = kernel.shape[1]//groups
-    output = torch.concat([spectral_conv2d_nogroup(x[:,i*in_size:(i+1)*in_size], kernel[:,i*out_size:(i+1)*out_size], kernel_shape, norm) for i in range(groups)], dim = 1)
+    out_size = kernel.shape[1] // groups
+    output = torch.concat(
+        [spectral_conv2d_nogroup(x[:, i * in_size : (i + 1) * in_size], kernel[:, i * out_size : (i + 1) * out_size], kernel_shape, norm) for i in range(groups)], dim=1
+    )
 
     return output
 
-def spectral_conv2d_nogroup(x, kernel, kernel_shape, norm):
+
+def spectral_conv2d_nogroup(x: Tensor, kernel: Tensor, kernel_shape: npt.NDArray[np.int32], norm: Literal["forward", "backward", "ortho"]) -> Tensor:
     x_shape = np.array(x.shape[-2:])
 
     compute_shape = np.min([x_shape, kernel_shape], axis=1)
@@ -89,24 +94,31 @@ def spectral_conv2d_nogroup(x, kernel, kernel_shape, norm):
     x_ft_padded = symmetric_padding(rfftshift(fft.rfft2(x, norm=norm)), x_shape, compute_shape + (1 - compute_shape % 2))
 
     # Elementwise multiplication of rfft-coefficients and return to physical space after correcting dimension with symmetric padding if desired dimension is even
-    output = fft.irfft2(
-        irfftshift(symmetric_padding(compl_mul2d(x_ft_padded, multiplier_padded), compute_shape + (1 - compute_shape % 2), x_shape)), norm=norm, s=tuple(x_shape)
-    )
+    output = fft.irfft2(irfftshift(symmetric_padding(compl_mul2d(x_ft_padded, multiplier_padded), compute_shape + (1 - compute_shape % 2), x_shape)), norm=norm, s=tuple(x_shape))
 
     return output
+
 
 class TrigonometricResize_2d(nn.Module):
     """Resize 2d image with trigonometric interpolation"""
 
-    def __init__(self, shape: npt.NDArray[np.int_] | tuple[int, ...], norm: Literal["forward", "backward", "ortho"] = "forward", upsample: bool = True, downsample: bool = True, check_comp: bool = False) -> None:
+    def __init__(
+        self,
+        shape: npt.NDArray[np.int_] | tuple[int, ...],
+        norm: Literal["forward", "backward", "ortho"] = "forward",
+        upsample: bool = True,
+        downsample: bool = True,
+        check_comp: bool = False,
+    ) -> None:
         super().__init__()
         self.shape = shape
         self.norm = norm
-        self.upsample = upsample # upsample == False: don't reshape if input shape is smaller than self.shape (downsampling only)
-        self.downsample = downsample # downsample == False: don't reshape if input shape is larger than self.shape (upsampling only)
+        self.upsample = upsample  # upsample == False: don't reshape if input shape is smaller than self.shape (downsampling only)
+        self.downsample = downsample  # downsample == False: don't reshape if input shape is larger than self.shape (upsampling only)
         self.check_comp = check_comp
 
-    def __call__(self, x: Tensor, keep_shape: bool = False) -> Tensor:
+    @override
+    def __call__(self, x: Tensor, keep_shape: bool = False) -> Tensor | tuple[Tensor, bool]:
         if keep_shape or (not self.downsample and not self.upsample):
             return x
         elif self.upsample and self.downsample:
@@ -116,7 +128,8 @@ class TrigonometricResize_2d(nn.Module):
             keep_shape = np.min(im_shape_new == np.array(x.shape[-2:]))
         elif not self.downsample:
             im_shape_new = np.maximum(np.array(self.shape), np.array(x.shape[-2:]))
-            
+        else:
+            raise NotImplementedError("Either upsampling or downsampling has to be True")
 
         if torch.is_complex(x):  # for complex valued functions, trigonometric interpolations is done by simple zero-padding of the Fourier coefficients
             x_inter = fft.ifft2(fft.fft2(x, norm=self.norm), s=self.shape, norm=self.norm)
@@ -124,9 +137,10 @@ class TrigonometricResize_2d(nn.Module):
             im_shape_old = np.array(x.shape[-2:])  # this has to be saved since it cannot be uniquely obtained by rfft(x)
             try:
                 x_inter = fft.irfft2(irfftshift(symmetric_padding(rfftshift(fft.rfft2(x, norm=self.norm)), im_shape_old, im_shape_new)), s=tuple(im_shape_new), norm=self.norm)
-            except RuntimeError:
+            except RuntimeError as e:
                 print(im_shape_old)
                 print(im_shape_new)
+                raise e
         if not self.upsample:
             return x_inter, keep_shape
         else:
@@ -155,7 +169,7 @@ class SpectralConv2d_memory(nn.Module):
 
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.norm = norm
+        self.norm: Literal["forward", "backward", "ortho"] = norm
 
         scale = 1 / (in_channels * out_channels)
 
@@ -168,7 +182,7 @@ class SpectralConv2d_memory(nn.Module):
         self.ksize2 = 2 * (weight.shape[-1] - 1) + self.odd
         self.weight = nn.Parameter(weight.clone())
 
-        self.bias = nn.Parameter(torch.empty((out_channels,1,1))) if bias else None
+        self.bias = nn.Parameter(torch.empty((out_channels, 1, 1))) if bias else None
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         if self.bias is not None:
             fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)  # pyright: ignore [reportPrivateUsage]
@@ -179,10 +193,10 @@ class SpectralConv2d_memory(nn.Module):
     @override
     def forward(self, x: Tensor) -> Tensor:
         kernel_shape = np.array([self.ksize1, self.ksize2])
-        output = spectral_conv2d(x, self.weight, kernel_shape, norm = self.norm)
+        output = spectral_conv2d(x, self.weight, kernel_shape, norm=self.norm)
         if self.bias is not None:
             output = output + self.bias
-            
+
         return output
 
     @override

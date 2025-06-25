@@ -16,6 +16,7 @@ class UNet(UNetBase):
         out_channels: int,
         depth: int = 4,
         base_channels: int = 64,
+        nonresize_convs_per_block: int = 2,
         use_checkpointing: bool = False,
     ) -> None:
         """
@@ -31,8 +32,7 @@ class UNet(UNetBase):
                 nn.Sequential(
                     nn.Conv2d(in_channels, base_channels, kernel_size=3, padding=1),
                     nn.ReLU(),
-                    nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1),
-                    nn.ReLU(),
+                    *[layer for _ in range(nonresize_convs_per_block) for layer in [nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1), nn.ReLU()]],
                 )
             ]
             + [
@@ -40,8 +40,7 @@ class UNet(UNetBase):
                     nn.MaxPool2d(2),
                     nn.Conv2d(base_channels * 2 ** (i - 1), base_channels * 2**i, kernel_size=3, padding=1),
                     nn.ReLU(),
-                    nn.Conv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, padding=1),
-                    nn.ReLU(),
+                    *[layer for _ in range(nonresize_convs_per_block) for layer in [nn.Conv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, padding=1), nn.ReLU()]],
                 )
                 for i in range(1, depth)
             ]
@@ -50,8 +49,7 @@ class UNet(UNetBase):
             nn.MaxPool2d(2),
             nn.Conv2d(base_channels * 2 ** (depth - 1), base_channels * 2**depth, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(base_channels * 2**depth, base_channels * 2**depth, kernel_size=3, padding=1),
-            nn.ReLU(),
+            *[layer for _ in range(nonresize_convs_per_block) for layer in [nn.Conv2d(base_channels * 2**depth, base_channels * 2**depth, kernel_size=3, padding=1), nn.ReLU()]],
             nn.ConvTranspose2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=2, stride=2),
         )
         self._up_blocks = nn.ModuleList(
@@ -59,8 +57,7 @@ class UNet(UNetBase):
                 nn.Sequential(
                     nn.Conv2d(base_channels * 2 ** (i + 1), base_channels * 2**i, kernel_size=3, padding=1),
                     nn.ReLU(),
-                    nn.Conv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, padding=1),
-                    nn.ReLU(),
+                    *[layer for _ in range(nonresize_convs_per_block) for layer in [nn.Conv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, padding=1), nn.ReLU()]],
                     nn.ConvTranspose2d(base_channels * 2**i, base_channels * 2 ** (i - 1), kernel_size=2, stride=2),
                 )
                 for i in range(depth - 1, 0, -1)
@@ -69,8 +66,7 @@ class UNet(UNetBase):
                 nn.Sequential(
                     nn.Conv2d(base_channels * 2, base_channels, kernel_size=3, padding=1),
                     nn.ReLU(),
-                    nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1),
-                    nn.ReLU(),
+                    *[layer for _ in range(nonresize_convs_per_block) for layer in [nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1), nn.ReLU()]],
                     nn.Conv2d(base_channels, out_channels, kernel_size=1),
                 )
             ]
