@@ -1,3 +1,4 @@
+import scipy.ndimage
 import torch
 from torch import Tensor
 from torch.utils.data import Dataset
@@ -18,6 +19,7 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
         ellipse_intensities: tuple[float, float] = (0.1, 1.0),
         normalize_intensities: bool = True,
         seed: int | None = None,
+        smoothing: float = 0.0,  # 3.0,
     ) -> None:
         super().__init__()
         self.__image_count = image_count
@@ -30,6 +32,7 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
         self.__ellipse_intensities = ellipse_intensities
         self.__normalize_intensities = normalize_intensities
         self.__seed = seed if seed is not None else int(torch.randint(2**32, (1,)).item())
+        self.__smoothing = smoothing
 
     def __len__(self) -> int:
         return self.__image_count
@@ -65,6 +68,7 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
             groundtruth = (distances.sum(-1) > 0.0).to(torch.get_default_dtype())
         else:
             groundtruth = distances.sum(-1)
+            scipy.ndimage.gaussian_filter(groundtruth, sigma=self.__smoothing, output=groundtruth, mode="constant", cval=0.0)
         if self.__normalize_intensities:
             groundtruth = groundtruth / (self.__ellipses_per_image * self.__ellipse_intensities[1])
         return {"input": groundtruth[None]}

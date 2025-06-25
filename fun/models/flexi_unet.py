@@ -3,46 +3,58 @@ import math
 from typing import Literal
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn, tensor
+import torch.nn.functional as F
 from typing_extensions import override
 
 from fun.models.unet_base import UNetBase
-from fun.utils.fno_utils import SpectralConv2d_memory as SpectralConv2d
-from fun.utils.fno_utils import spectral_conv2d
+from fun.utils.fno_utils import SpectralConv2d_memory as SpectralConv2d, spectral_conv2d
 from fun.utils.interp_utils import interp_conv2d
+
 
 ## SPECIAL LAYERS #############################################################################################################################
 ###############################################################################################################################################
 ###############################################################################################################################################
 
+
 class CombiIntegral(nn.Module):
-    def __init__(self, base_input_size) -> None:
+    def __init__(self, base_input_size: tuple[int, ...]) -> None:
         super().__init__()
-        weight = torch.zeros((9,1,3,3))
+        weight = torch.zeros((9, 1, 3, 3))
         for i in range(9):
-            weight[i,0,i//3,i%3] = 1
-        #self.integral_weight = nn.Parameter(weight, requires_grad = False)
-        self.spectral_weight = nn.Parameter(torch.fft.rfft2(weight, norm = 'forward'), requires_grad = False)
-        self.diff_weight = nn.Parameter(tensor([[[[0.0, 0.0, 0.0], [1.0, -1.0, 0], [0.0, 0.0, 0.0]]],\
-                                                [[[0.0, 1.0, 0.0], [0.0, -1.0, 0], [0.0, 0.0, 0.0]]],\
-                                                [[[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 0.0]]]]), requires_grad=False)
+            weight[i, 0, i // 3, i % 3] = 1
+        # self.integral_weight = nn.Parameter(weight, requires_grad = False)
+        self.spectral_weight = nn.Parameter(torch.fft.rfft2(weight, norm="forward"), requires_grad=False)
+        self.diff_weight = nn.Parameter(
+            tensor(
+                [[[[0.0, 0.0, 0.0], [1.0, -1.0, 0], [0.0, 0.0, 0.0]]], [[[0.0, 1.0, 0.0], [0.0, -1.0, 0], [0.0, 0.0, 0.0]]], [[[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 0.0]]]]
+            ),
+            requires_grad=False,
+        )
         self.base_input_size = base_input_size
-        
+
     @override
-    def forward(self, x:Tensor) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         groups = x.shape[1]
         return torch.concat(
             [
-                torch.concat([spectral_conv2d(x, self.spectral_weight[i:i+1].expand(-1, groups, -1, -1), kernel_shape = (3,3), norm = 'forward', groups = groups)\
-                              for i in range(self.spectral_weight.shape[0])], dim = 1),
-                #torch.concat([interp_conv2d(x, self.integral_weight[i:i+1].expand(groups, -1, -1, -1), self.base_input_size, groups = groups, bias = None, pad = True, padding_mode = "constant")\
+                torch.concat(
+                    [
+                        spectral_conv2d(x, self.spectral_weight[i : i + 1].expand(-1, groups, -1, -1), kernel_shape=(3, 3), norm="forward", groups=groups)
+                        for i in range(self.spectral_weight.shape[0])
+                    ],
+                    dim=1,
+                ),
+                # torch.concat([interp_conv2d(x, self.integral_weight[i:i+1].expand(groups, -1, -1, -1), self.base_input_size, groups = groups, bias = None, pad = True, padding_mode = "constant")\
                 #              for i in range(self.integral_weight.shape[0])], dim = 1),
-                torch.concat([F.conv2d(x, self.diff_weight[i:i+1].expand(groups, -1, -1, -1), groups=groups, bias=None, stride=1, padding=1)\
-                              for i in range(self.diff_weight.shape[0])], dim = 1 )
-                
-            ], dim = 1)
-        
+                torch.concat(
+                    [F.conv2d(x, self.diff_weight[i : i + 1].expand(groups, -1, -1, -1), groups=groups, bias=None, stride=1, padding=1) for i in range(self.diff_weight.shape[0])],
+                    dim=1,
+                ),
+            ],
+            dim=1,
+        )
+
 
 class EasyDiffs(nn.Module):
     def __init__(self) -> None:
@@ -125,7 +137,7 @@ class InterpolatingConv2d(nn.Module):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
-        return interp_conv2d(x, self.weight, self.__base_input_size, bias = self.bias, pad = self.__pad, padding_mode = self.__padding_mode)
+        return interp_conv2d(x, self.weight, self.__base_input_size, bias=self.bias, pad=self.__pad, padding_mode=self.__padding_mode)
 
 
 ###############################################################################################################################################
@@ -163,9 +175,11 @@ def create_interp_layer(in_channels: int, out_channels: int, level: int = 0) -> 
     max_scale_factor = 4
     return InterpolatingConv2d(in_channels, out_channels, base_kernel_size, base_input_size // 2 ** (level), max_scale_factor, padding="same")
 
+
 def create_combi_layer(in_channels: int, out_channels: int, level: int = 0) -> nn.Sequential:
     base_input_size = 64
     return nn.Sequential(CombiIntegral(base_input_size // 2 ** (level)), nn.Conv2d(in_channels * 12, out_channels, kernel_size=1))
+
 
 ###############################################################################################################################################
 ###############################################################################################################################################
@@ -179,7 +193,14 @@ def create_block(
     in_channels: int | None = None,
     out_channels: int | None = None,
 ) -> nn.Sequential:
-    modedict = {"classic": create_classic_layer, "fno": create_fno_layer, "findiff": create_finite_diff_layer, "diff": create_diff_layer, "interp": create_interp_layer, "combi": create_combi_layer}
+    modedict = {
+        "classic": create_classic_layer,
+        "fno": create_fno_layer,
+        "findiff": create_finite_diff_layer,
+        "diff": create_diff_layer,
+        "interp": create_interp_layer,
+        "combi": create_combi_layer,
+    }
     if updown == "first":
         if in_channels is None:
             in_channels = base_channels
@@ -216,8 +237,7 @@ def create_block(
             modedict[mode](base_channels * 2**level, base_channels * 2**level, level),
             nn.ReLU(),
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            modedict[mode](base_channels * 2**level, base_channels * 2**(level-1), level-1)
-
+            modedict[mode](base_channels * 2**level, base_channels * 2 ** (level - 1), level - 1),
         )
     elif updown == "central":
         return nn.Sequential(
@@ -227,8 +247,7 @@ def create_block(
             modedict[mode](base_channels * 2**level, base_channels * 2**level, level),
             nn.ReLU(),
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            modedict[mode](base_channels * 2**level, base_channels * 2**(level-1), level-1)
-
+            modedict[mode](base_channels * 2**level, base_channels * 2 ** (level - 1), level - 1),
         )
 
 

@@ -48,10 +48,8 @@ class InterpolatingConv2d(nn.Module):
         assert x.shape[3] % self.__base_input_size == 0, f"Input size {x.shape[3]} is not an integer multiple of {self.__base_input_size}"
         scale_factor = x.shape[3] / (self.__base_input_size * self.__max_scale_factor)
         weight = F.interpolate(self.weight, scale_factor=scale_factor, mode="bilinear", align_corners=False) / scale_factor**2
-        # TODO Read for interpolate instabilities
-        # TODO Max pool instead of interpolate
+        # weight = torch.nn.functional.avg_pool2d(self.weight, int(1 / scale_factor), stride=int(1 / scale_factor)) / scale_factor**2
         # TODO Other order interpolate?
-        # TODO Log grads and weights
         if self.__pad:
             total_padding = weight.shape[-1] - 1
             padding_start = total_padding // 2

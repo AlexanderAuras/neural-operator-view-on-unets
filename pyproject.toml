@@ -41,6 +41,7 @@ randomname = "^0.2.1"
 h5py = "^3.13.0"
 typing-extensions = "^4.13.0"
 aiohttp = "!=3.11.14"  # Autoselected version 3.11.14 is yanked
+scipy = "^1.15.3"
 
 [[tool.poetry.source]]
 name = "torch-cuda"
