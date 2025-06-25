@@ -8,8 +8,8 @@
 
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gpus-per-task=1
-#SBATCH --gres=gpu:1
+#SBATCH --gpus-per-task=2
+#SBATCH --gres=gpu:2
 #SBATCH --mem=32G
 
 #SBATCH --time=0-23:59:59
@@ -32,7 +32,7 @@ export CUBLAS_WORKSPACE_CONFIG=:4096:8
 /home/aa609734/.conda/envs/FNO-UNet/bin/python /home/aa609734/Projects/FNO-UNet/fun/__main__.py\
     --no-compile\
     --max-epochs=10\
-    --devices cuda:0\
+    --devices cuda:0 cuda:1\
     --num-workers=0\
     $@
     # --batch-size=32\
