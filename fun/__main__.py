@@ -30,7 +30,7 @@ from tqdm.auto import tqdm, trange
 from fun.data.ct_dataset import CTPostProcessDataset
 from fun.data.ellipses_dataset import EllipsesDataset
 from fun.data.multi_res_batch_sampler import MultiResolutionBatchSampler
-from fun.models.classical_unet import UNet
+from fun.models.custom_unet import CustomUNet
 from fun.models.dncnn import DnCNN
 from fun.models.fno_unet import HeatUNet
 from fun.models.interp_unet import InterpolatingUNet
@@ -89,7 +89,7 @@ def main() -> None:
     argparser.add_argument("--forced-run-name", type=str, default=None)
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
-    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "heat", "uno", "specResU", "spatResU", "specRes", "spatU"], required=True)
+    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "heat", "uno", "specResU", "spatResU", "specRes", "spatU", "unet-custom"], required=True)
     # argparser.add_argument("--flexi-modes", nargs="+", choices=["classic", "fno", "jump", "diff", "interp", "combi"], default=["diff", "fno", "fno"])
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
@@ -102,6 +102,9 @@ def main() -> None:
     argparser.add_argument("--angle-percent", type=float, default=0.75)
     argparser.add_argument("--num-ellipses", type=int, default=10)
     argparser.add_argument("--smooth-data", dest="smooth", action="store_true")
+    argparser.add_argument("--interp-mode", action="store_true")
+    argparser.add_argument("--unet-convs", type=int, default=1)
+    argparser.add_argument("--pooling-base-size", type=int, default=None)
     args = argparser.parse_args()
 
     if args.forced_run_name is not None:
@@ -373,7 +376,12 @@ def main() -> None:
     logger.info("Creating model")
     match args.model:
         case "unet":
-            model = UNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=0)
+            model = CustomUNet(
+                1,
+                1,
+                use_checkpointing=args.use_checkpointing,
+                nonresize_convs_per_block=args.unet_convs,
+            )
         case "dncnn":
             model = DnCNN(1, use_checkpointing=args.use_checkpointing)
         case "unet-interp":
@@ -390,6 +398,14 @@ def main() -> None:
             model = SpectralResUNet(1, 1, parametrization="spatial", u_shape=True)
         case "spatU":
             model = SpectralUNet(1, 1, parametrization="spatial", u_shape=True)
+        case "unet-custom":
+            model = CustomUNet(
+                1,
+                1,
+                use_checkpointing=args.use_checkpointing,
+                nonresize_convs_per_block=args.unet_convs,
+                optional_pool_base_size=args.pooling_base_size,
+            )
         # case "flexi":
         #     model = FlexiUNet(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
         # case "flexi_res":
@@ -468,7 +484,7 @@ def main() -> None:
                 input_ = sample["input"].to(args.devices[0])
                 target = sample["target"].to(args.devices[0])
                 prediction = fwd_func(input_)
-                val_loss += loss_function(prediction, target).item()
+                val_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
                 if i == 0:
                     for j in range(min(4, input_.shape[0])):
                         out_dir.joinpath("val-imgs", f"{name}-input-{j}").mkdir(parents=True, exist_ok=True)
@@ -513,9 +529,11 @@ def main() -> None:
                     target = sample["target"].to(args.devices[0])
                     with torch.enable_grad():
                         prediction = fwd_func(input_)
-                        loss = loss_function(prediction, target)
+                        loss = loss_function(prediction, target) * ((input_.shape[-1] / 100) if args.interp_mode else 1)
                         loss = loss / args.accumulation_steps
                     loss.backward()
+                    if args.interp_mode:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # pyright: ignore [reportPrivateImportUsage]
                     if (batch_no + 1) % args.accumulation_steps == 0 or batch_no == len(train_dataloader) - 1:
                         optimizer.step()
                         if LOG_TRAIN_WEIGHTS_GRADS:
@@ -541,7 +559,7 @@ def main() -> None:
                         input_ = sample["input"].to(args.devices[0])
                         target = sample["target"].to(args.devices[0])
                         prediction = fwd_func(input_)
-                        val_loss += loss_function(prediction, target).item()
+                        val_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
                         if i == 0:
                             for j in range(min(4, input_.shape[0])):
                                 out_dir.joinpath("val-imgs", f"{name}-input-{j}").mkdir(parents=True, exist_ok=True)
@@ -625,8 +643,8 @@ def main() -> None:
             input_ = sample["input"].to(args.devices[0])
             target = sample["target"].to(args.devices[0])
             prediction = fwd_func(input_)
-            test_loss += loss_function(prediction, target).item()
-            baseline_loss += loss_function(input_, target).item()
+            test_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
+            baseline_loss += loss_function(input_, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
             if i == 0:
                 for j in range(min(4, input_.shape[0])):
                     np.save(out_dir / "test-imgs" / f"{name}-input-{j}.npy", input_[j].cpu().detach().numpy())
