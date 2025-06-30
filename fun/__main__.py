@@ -34,7 +34,7 @@ from fun.models.classical_unet import UNet
 from fun.models.dncnn import DnCNN
 from fun.models.fno_unet import HeatUNet
 from fun.models.interp_unet import InterpolatingUNet
-from fun.models.spectral_unet import SpectralResUNet, SpectralUNet
+from fun.models.spectral_unet import SpectralResUNet, SmallResUNet
 
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
@@ -92,7 +92,8 @@ def main() -> None:
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
     argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "heat", "uno", \
-                                               "specResU", "spatResU", "specRes", "spatU"], required=True)
+                                               "specResU", "spatResU", "specRes", "smallResU"], required=True)
+    argparser.add_argument("--kbase", type=int, default=256)
     # argparser.add_argument("--flexi-modes", nargs="+", choices=["classic", "fno", "jump", "diff", "interp", "combi"], default=["diff", "fno", "fno"])
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
@@ -386,13 +387,13 @@ def main() -> None:
         case "heat":
             model = HeatUNet(1, 1)
         case "specResU":
-            model = SpectralResUNet(1, 1, parametrization='spectral', u_shape = True)
+            model = SpectralResUNet(1, 1, parametrization='spectral', u_shape = True, kbase1=args.kbase, kbase2=args.kbase)
         case "specRes":
-            model = SpectralResUNet(1, 1, parametrization='spectral', u_shape = False)
+            model = SpectralResUNet(1, 1, parametrization='spectral', u_shape = False, kbase1=args.kbase, kbase2=args.kbase)
         case "spatResU":
-            model = SpectralResUNet(1, 1, parametrization='spatial', u_shape = True)
-        case "spatU":
-            model = SpectralUNet(1, 1, parametrization='spatial', u_shape = True)
+            model = SpectralResUNet(1, 1, parametrization='spatial', u_shape = True, kbase1=args.kbase, kbase2=args.kbase)
+        case "smallResU":
+            model = SmallResUNet(1, 1)
         # case "flexi":
         #     model = FlexiUNet(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
         # case "flexi_res":
