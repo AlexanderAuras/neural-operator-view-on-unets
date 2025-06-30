@@ -68,11 +68,9 @@
                 "unet",
                 "dncnn",
                 "unet-interp",
-                "fno",
                 "heat",
-                "classicdiff",
-                "diff",
-                "jump",
+                "spectral",
+                "uno"
             ],
             "default": "classic",
         }

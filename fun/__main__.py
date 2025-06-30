@@ -13,7 +13,7 @@ from typing import cast
 import warnings
 import zipfile
 
-from neuralop.models import UNO
+# from neuralop.models import UNO
 import numpy as np
 import PIL.Image as Image
 import randomname
@@ -42,8 +42,6 @@ BASE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 LOG_VAL_WEIGHTS = False
 LOG_TRAIN_WEIGHTS_GRADS = False
-
-ELLIPSES_SMOOTHING = 3.0
 
 
 def setup_logging(logging_config_path: str | Path, out_dir: str | Path | None = None) -> None:
@@ -377,7 +375,7 @@ def main() -> None:
     logger.info("Creating model")
     match args.model:
         case "unet":
-            model = UNet(1, 1, use_checkpointing=args.use_checkpointing)
+            model = UNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=0)
         case "dncnn":
             model = DnCNN(1, use_checkpointing=args.use_checkpointing)
         case "unet-interp":
@@ -387,30 +385,30 @@ def main() -> None:
         case "heat":
             model = HeatUNet(1, 1)
         case "specResU":
-            model = SpectralResUNet(1, 1, parametrization='spectral', u_shape = True, kbase1=args.kbase, kbase2=args.kbase)
+            model = SpectralResUNet(1, 1, parametrization="spectral", u_shape=True, kbase1=args.kbase, kbase2=args.kbase)
         case "specRes":
-            model = SpectralResUNet(1, 1, parametrization='spectral', u_shape = False, kbase1=args.kbase, kbase2=args.kbase)
+            model = SpectralResUNet(1, 1, parametrization="spectral", u_shape=False, kbase1=args.kbase, kbase2=args.kbase)
         case "spatResU":
-            model = SpectralResUNet(1, 1, parametrization='spatial', u_shape = True, kbase1=args.kbase, kbase2=args.kbase)
+            model = SpectralResUNet(1, 1, parametrization="spatial", u_shape=True, kbase1=args.kbase, kbase2=args.kbase)
         case "smallResU":
             model = SmallResUNet(1, 1)
         # case "flexi":
         #     model = FlexiUNet(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
         # case "flexi_res":
         #     model = FlexiUNet_Res(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
-        case "uno":
-            model = UNO(
-                1,
-                1,
-                64,
-                n_layers=9,
-                uno_out_channels=[64, 128, 256, 512, 1024, 512, 256, 128, 64],
-                uno_n_modes=[[256, 256], [128, 128], [64, 64], [32, 32], [16, 16], [32, 32], [64, 64], [128, 128], [256, 256]],
-                uno_scalings=[[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]],
-                skip="linear",
-                fno_skip="linear",
-                channel_mlp_skip="linear",
-            )
+        # case "uno":
+        #     model = UNO(
+        #         1,
+        #         1,
+        #         64,
+        #         n_layers=9,
+        #         uno_out_channels=[64, 128, 256, 512, 1024, 512, 256, 128, 64],
+        #         uno_n_modes=[[256, 256], [128, 128], [64, 64], [32, 32], [16, 16], [32, 32], [64, 64], [128, 128], [256, 256]],
+        #         uno_scalings=[[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]],
+        #         skip="linear",
+        #         fno_skip="linear",
+        #         channel_mlp_skip="linear",
+        #     )
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     logger.info("Rendering compute graph")
@@ -604,7 +602,7 @@ def main() -> None:
         logger.info("Saving final weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
         torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
-        if args.model not in ['fno', 'heat', 'uno', 'specResU', 'specRes', 'spatResU', 'spatU']:
+        if args.model not in ["fno", "heat", "uno", "specResU", "specRes", "spatResU", "spatU"]:
             logger.info("Exporting weights to ONNX")
             logger.debug(f"    Path: {out_dir / 'model.onnx'}")
             with warnings.catch_warnings():
