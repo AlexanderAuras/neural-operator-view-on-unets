@@ -98,8 +98,97 @@ def create_conv_layer(parametrization: Literal["spectral", "spatial"], in_channe
     if parametrization == "spectral":
         return SpectralConv2d(in_channels, out_channels, ksize1=ksize1, ksize2=ksize2)
     else:
-        return nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=kernel_size // 2, padding_mode="circular")
+        return nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=kernel_size//2, padding_mode="circular")
 
+class SmallResUNet(UNetBase):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        depth: int = 4,
+        base_channels: int = 64,
+        use_checkpointing: bool = False,
+    ) -> None:
+        super().__init__(in_channels, out_channels, depth, base_channels, use_checkpointing)
+        self._down_blocks = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv2d(in_channels, base_channels, kernel_size=3, padding=1),
+                    nn.ReLU(),
+                    Residual_Layer(nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1, padding_mode="circular"),
+                    nn.ReLU()),
+                )
+            ]
+            + [
+                nn.Sequential(
+                    nn.MaxPool2d(2),
+                    Residual_Layer(nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1, padding_mode="circular"),
+                    nn.ReLU()),
+                )
+                for i in range(1, depth)
+            ]
+        )
+        self._central_block = nn.Sequential(
+            nn.MaxPool2d(2),
+            Residual_Layer(nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1, padding_mode="circular"),
+                    nn.ReLU()),
+            nn.ConvTranspose2d(base_channels, base_channels, kernel_size=2, stride=2),
+        )
+        self._up_blocks = nn.ModuleList(
+            [
+                nn.Sequential(
+                    Residual_Layer(nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1, padding_mode="circular"),
+                    nn.ReLU()),
+                    nn.ConvTranspose2d(base_channels, base_channels, kernel_size=2, stride=2),
+                )
+                for i in range(depth - 1, 0, -1)
+            ]
+            + [
+                nn.Sequential(
+                    Residual_Layer(nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1,
+                                             padding_mode = 'circular'),
+                                   nn.ReLU()),
+                    nn.Conv2d(base_channels, out_channels, kernel_size=1),
+                )
+            ]
+        )
+    def __partial_forward(self, x: Tensor) -> tuple[Tensor, list[Tensor]]:
+        tmp = []
+        x = x.to(next(self._down_blocks.parameters()).device)
+        for down_block in self._down_blocks:
+            x = down_block(x)
+            tmp.append(x)
+        x = x.to(next(self._central_block.parameters()).device)
+        x = self._central_block(x)
+        return x, tmp
+    
+    @override
+    def forward(self, x: Tensor) -> Tensor:
+        if x.ndim != 4:
+            raise ValueError(f"Expected 4D input, got {x.ndim}D input")
+        if x.shape[3] < 2 ** len(self._down_blocks):
+            raise ValueError(f"Input width must be greater than or equal to {2 ** len(self._down_blocks)}, got {x.shape[3]}")
+        if x.shape[2] < 2 ** len(self._down_blocks):
+            raise ValueError(f"Input height must be greater than or equal to {2 ** len(self._down_blocks)}, got {x.shape[2]}")
+        #allowed_input_channels = cast(tuple[int, ...], cast(nn.Sequential, self._down_blocks[0])[0].weight.shape)[1]
+        #if x.shape[1] != allowed_input_channels:
+        #    raise ValueError(f"Input has an invalid number of channels, expected {allowed_input_channels}, got {x.shape[1]}")
+        if x.shape[3] % 2 ** len(self._down_blocks) != 0:
+            raise ValueError(
+                f"Input width is not divisible by {2 ** len(self._down_blocks)}, got {x.shape[3]}" + f" ({x.shape[3]} / {2 ** len(self._down_blocks)} = {x.shape[3] / 2 ** len(self._down_blocks)})."
+            )
+        orig_device = x.device
+        if self._use_checkpointing:
+            x, tmp = cast(Tensor, torch.utils.checkpoint.checkpoint(self.__partial_forward, x, use_reentrant=False))
+        else:
+            x, tmp = self.__partial_forward(x)
+        dev = next(self._up_blocks.parameters()).device
+        x = x.to(dev)
+        tmp = [y.to(dev) for y in tmp]
+        for i, up_block in enumerate(self._up_blocks):
+            x = x + tmp[-(i + 1)]
+            x = up_block(x)
+        return x.to(orig_device)
 
 class SpectralResUNet(MultiDimUNet):
     def __init__(
@@ -125,7 +214,10 @@ class SpectralResUNet(MultiDimUNet):
         self.kernel_size = kernel_size
 
         ## Convolutional Layers
-        self._first_block = nn.Sequential(create_conv_layer(self.parametrization, in_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size), nn.ReLU())
+        self._first_block = nn.Sequential(create_conv_layer(self.parametrization, in_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size),
+            nn.ReLU(),
+            Residual_Layer(create_conv_layer(self.parametrization, base_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size),
+            nn.ReLU()))
 
         self._down_conv_layers = nn.ModuleList(
             [
@@ -189,6 +281,7 @@ class SpectralResUNet(MultiDimUNet):
         )
 
         new_model._first_block[0] = gen_from_Conv2d(self._first_block[0], ksize1=self.kbase1, ksize2=self.kbase2)
+        new_model._first_block[2].linear_layer = gen_from_Conv2d(self._first_block[2].linear_layer, ksize1=self.kbase1, ksize2=self.kbase2)
 
         for i in range(1, self._depth):
             new_model._down_conv_layers[i - 1].linear_layer = gen_from_Conv2d(
@@ -240,7 +333,10 @@ class SpectralUNet(MultiDimUNet):
         self.kernel_size = kernel_size
 
         ## Convolutional Layers
-        self._first_block = nn.Sequential(create_conv_layer(parametrization, in_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size), nn.ReLU())
+        self._first_block = nn.Sequential(create_conv_layer(parametrization, in_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size = kernel_size),
+                    nn.ReLU(), 
+                    create_conv_layer(parametrization, base_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size), 
+                    nn.ReLU())
         self._down_conv_layers = nn.ModuleList(
             [
                 nn.Sequential(
@@ -319,6 +415,7 @@ class SpectralUNet(MultiDimUNet):
         )
 
         new_model._first_block[0] = gen_from_Conv2d(self._first_block[0], ksize1=self.kbase1, ksize2=self.kbase2)
+        new_model._first_block[2] = gen_from_Conv2d(self._first_block[2], ksize1 = self.kbase1, ksize2=self.kbase2)
 
         for i in range(1, self._depth):
             cast(nn.ModuleList, new_model._down_conv_layers[i - 1])[0] = gen_from_Conv2d(
