@@ -638,38 +638,42 @@ def main() -> None:
     out_dir.joinpath("test-imgs").mkdir(parents=True)
     all_test_loss = 0.0
     for name, dataloader in tqdm(test_dataloaders.items(), desc="Testing", unit="dataset", position=0, leave=True):
-        test_loss = 0.0
-        baseline_loss = 0.0
-        for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
-            input_ = sample["input"].to(args.devices[0])
-            target = sample["target"].to(args.devices[0])
-            prediction = fwd_func(input_)
-            test_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
-            baseline_loss += loss_function(input_, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
-            if i == 0:
-                for j in range(min(4, input_.shape[0])):
-                    np.save(out_dir / "test-imgs" / f"{name}-input-{j}.npy", input_[j].cpu().detach().numpy())
-                    np.save(out_dir / "test-imgs" / f"{name}-target-{j}.npy", target[j].cpu().detach().numpy())
-                    np.save(out_dir / "test-imgs" / f"{name}-prediction-{j}.npy", prediction[j].cpu().detach().numpy())
-                    filename = out_dir / "test-imgs" / f"{name}-input-{j}.png"
-                    Image.fromarray((normalized(input_[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                    filename = out_dir / "test-imgs" / f"{name}-target-{j}.png"
-                    Image.fromarray((normalized(target[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                    filename = out_dir / "test-imgs" / f"{name}-prediction-{j}.png"
-                    Image.fromarray((normalized(prediction[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                    tb_logger.add_image(f"test/{name}-input-{j}", normalized(input_[j]), global_step=0)
-                    tb_logger.add_image(f"test/{name}-target-{j}", normalized(target[j]), global_step=0)
-                    tb_logger.add_image(f"test/{name}-prediction-{j}", normalized(prediction[j]), global_step=0)
-        test_loss /= len(dataloader)
-        baseline_loss /= len(dataloader)
-        all_test_loss += test_loss
-        logger.info(f'Final test loss on "{name}": {test_loss:.3e}')
-        with out_dir.joinpath("test-results.csv").open("a") as file:
-            file.write(f"{name},loss,{test_loss}\n")
-        with out_dir.joinpath("baseline.csv").open("a") as file:
-            file.write(f"{name},loss,{baseline_loss}\n")
-        tb_logger.add_scalar(f"test/{name}-loss", test_loss, global_step=0)
-        tb_logger.add_scalar(f"baseline/{name}-loss", baseline_loss, global_step=0)
+        try:
+            test_loss = 0.0
+            baseline_loss = 0.0
+            for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
+                input_ = sample["input"].to(args.devices[0])
+                target = sample["target"].to(args.devices[0])
+                prediction = fwd_func(input_)
+                test_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
+                baseline_loss += loss_function(input_, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
+                if i == 0:
+                    for j in range(min(4, input_.shape[0])):
+                        np.save(out_dir / "test-imgs" / f"{name}-input-{j}.npy", input_[j].cpu().detach().numpy())
+                        np.save(out_dir / "test-imgs" / f"{name}-target-{j}.npy", target[j].cpu().detach().numpy())
+                        np.save(out_dir / "test-imgs" / f"{name}-prediction-{j}.npy", prediction[j].cpu().detach().numpy())
+                        filename = out_dir / "test-imgs" / f"{name}-input-{j}.png"
+                        Image.fromarray((normalized(input_[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                        filename = out_dir / "test-imgs" / f"{name}-target-{j}.png"
+                        Image.fromarray((normalized(target[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                        filename = out_dir / "test-imgs" / f"{name}-prediction-{j}.png"
+                        Image.fromarray((normalized(prediction[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                        tb_logger.add_image(f"test/{name}-input-{j}", normalized(input_[j]), global_step=0)
+                        tb_logger.add_image(f"test/{name}-target-{j}", normalized(target[j]), global_step=0)
+                        tb_logger.add_image(f"test/{name}-prediction-{j}", normalized(prediction[j]), global_step=0)
+            test_loss /= len(dataloader)
+            baseline_loss /= len(dataloader)
+            all_test_loss += test_loss
+            logger.info(f'Final test loss on "{name}": {test_loss:.3e}')
+            with out_dir.joinpath("test-results.csv").open("a") as file:
+                file.write(f"{name},loss,{test_loss}\n")
+            with out_dir.joinpath("baseline.csv").open("a") as file:
+                file.write(f"{name},loss,{baseline_loss}\n")
+            tb_logger.add_scalar(f"test/{name}-loss", test_loss, global_step=0)
+            tb_logger.add_scalar(f"baseline/{name}-loss", baseline_loss, global_step=0)
+        except Exception as e:
+            logger.error(f"Error during testing on dataset {name}: {e}")
+            continue
     all_test_loss /= len(test_dataloaders)
     with out_dir.joinpath("test-results.csv").open("a") as file:
         file.write(f"all-avg,loss,{all_test_loss}\n")
