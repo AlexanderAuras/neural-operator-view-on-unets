@@ -99,7 +99,7 @@ def main() -> None:
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
     argparser.add_argument("--model-save-freq", type=int, default=1)
-    argparser.add_argument("--noise-level", type=float, default=0.0)
+    argparser.add_argument("--noise-level", type=float, default=0.1)
     argparser.add_argument("--angle-percent", type=float, default=0.75)
     argparser.add_argument("--num-ellipses", type=int, default=10)
     argparser.add_argument("--smooth-data", dest="smooth", action="store_true")
@@ -338,9 +338,9 @@ def main() -> None:
                     noise_type="gaussian",
                     noise_level=args.noise_level,
                 )
-                for r in range(*((64, 257, 64) if args.model == "unet-interp" else (16, 305, 16)))
+                for r in range(*((64, 1025, 64) if args.model == "unet-interp" else (16, 1025, 16)))
             }
-            exemplary_image_shape = (1, 256, 256) if args.model == "unet-interp" else (1, 304, 304)
+            exemplary_image_shape = (1, 256, 256)
         case _:
             raise ValueError(f'Unknown dataset: "{args.dataset}"')
     logger.info("Creating dataloaders")
@@ -525,14 +525,15 @@ def main() -> None:
                 model.train()
                 batches_iter = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc="Training", unit="batch", position=1, leave=False)
                 optimizer.zero_grad()
+                acc_loss = 0.0
                 for batch_no, sample in batches_iter:
                     input_ = sample["input"].to(args.devices[0])
                     target = sample["target"].to(args.devices[0])
                     with torch.enable_grad():
                         prediction = fwd_func(input_)
-                        loss = loss_function(prediction, target) * ((input_.shape[-1] / 100) if args.interp_mode else 1)
-                        loss = loss / args.accumulation_steps
-                    loss.backward()
+                        loss = loss_function(prediction, target) * ((input_.shape[-1] / 100) if args.interp_mode else 1) / args.accumulation_steps
+                        loss.backward()
+                    acc_loss += loss.item()
                     if args.interp_mode:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # pyright: ignore [reportPrivateImportUsage]
                     if (batch_no + 1) % args.accumulation_steps == 0 or batch_no == len(train_dataloader) - 1:
@@ -546,9 +547,9 @@ def main() -> None:
                                     tb_logger.add_histogram("train/" + name + ".grad", parameter.grad.flatten(), global_step=epoch * len(train_dataloader) + batch_no, bins="auto")
                         optimizer.zero_grad()
                     with out_dir.joinpath("train-loss.csv").open("a") as file:
-                        file.write(f"{epoch * len(train_dataloader) + batch_no},{loss.item()},{datetime.datetime.now().isoformat()}\n")
-                    tb_logger.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + batch_no)
-                    batches_iter.set_postfix({"Train-Loss": loss.item()})
+                        file.write(f"{epoch * len(train_dataloader) + batch_no},{acc_loss},{datetime.datetime.now().isoformat()}\n")
+                    tb_logger.add_scalar("train/loss", acc_loss, global_step=epoch * len(train_dataloader) + batch_no)
+                    batches_iter.set_postfix({"Train-Loss": acc_loss})
                 batches_iter.close()
 
                 # Validate model
