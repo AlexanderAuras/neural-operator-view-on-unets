@@ -44,7 +44,7 @@ from fun.data.multi_res_batch_sampler import MultiResolutionBatchSampler
 from fun.models.custom_unet import CustomUNet
 from fun.models.dncnn import DnCNN
 from fun.models.interp_unet import InterpolatingUNet
-from fun.models.spectral_unet import SmallResUNet, SpectralResUNet
+from fun.models.spectral_unet import SpectralResUNet
 
 from CNO2d_original_version.CNOModule import CNO
 from neuralop.models import UNO
@@ -408,8 +408,6 @@ def main() -> None:
             model = SpectralResUNet(1, 1, parametrization="spectral", u_shape=False, kbase1=args.kbase, kbase2=args.kbase)
         case "spatResU":
             model = SpectralResUNet(1, 1, parametrization="spatial", u_shape=True, kbase1=args.kbase, kbase2=args.kbase)
-        case "smallResU":
-            model = SmallResUNet(1, 1)
         case "cno":
             model = CNO(in_dim=1, in_size=in_size, N_layers=4, N_res=3, N_res_neck=3, channel_multiplier=128)
         case "unet-custom":
@@ -628,7 +626,7 @@ def main() -> None:
         logger.info("Saving final weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
         torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
-        if args.model not in ["fno", "heat", "uno", "specResU", "specRes", "spatResU", "spatU", "cno"]:
+        if args.model not in ["specResU", "specRes", "spatResU", "cno", "uno"]:
             logger.info("Exporting weights to ONNX")
             logger.debug(f"    Path: {out_dir / 'model.onnx'}")
             with warnings.catch_warnings():
