@@ -79,9 +79,11 @@ class CustomUNet(UNetBase):
         out_channels: int,
         depth: int = 4,
         base_channels: int = 64,
-        nonresize_convs_per_block: int = 1,
+        nonresize_convs_per_block: int = 0,
         use_checkpointing: bool = False,
         optional_pool_base_size: int | None = None,
+        conv_type: type[nn.Module] = nn.Conv2d,
+        conv_kwargs: dict[str, Any] = {},
     ) -> None:
         """
         Args:
@@ -95,26 +97,36 @@ class CustomUNet(UNetBase):
         self._down_blocks = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.Conv2d(in_channels, base_channels, kernel_size=3, padding=1),
+                    conv_type(in_channels, base_channels, kernel_size=3, padding=1, **conv_kwargs),
                     nn.ReLU(),
-                    *[layer for _ in range(nonresize_convs_per_block) for layer in [nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1), nn.ReLU()]],
+                    conv_type(base_channels, base_channels, kernel_size=3, padding=1, **conv_kwargs),
+                    nn.ReLU(),
+                    *[layer for _ in range(nonresize_convs_per_block) for layer in [conv_type(base_channels, base_channels, kernel_size=3, padding=1, **conv_kwargs), nn.ReLU()]],
                 )
             ]
             + [
                 nn.Sequential(
                     OptionalMaxPool2d(optional_pool_base_size // 2**i, 2) if optional_pool_base_size is not None else nn.MaxPool2d(2),
-                    nn.Conv2d(base_channels * 2 ** (i - 1), base_channels * 2**i, kernel_size=3, padding=1),
+                    conv_type(base_channels * 2 ** (i - 1), base_channels * 2**i, kernel_size=3, padding=1, **conv_kwargs),
                     nn.ReLU(),
-                    *[layer for _ in range(nonresize_convs_per_block) for layer in [nn.Conv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, padding=1), nn.ReLU()]],
+                    *[
+                        layer
+                        for _ in range(nonresize_convs_per_block)
+                        for layer in [conv_type(base_channels * 2**i, base_channels * 2**i, kernel_size=3, padding=1, **conv_kwargs), nn.ReLU()]
+                    ],
                 )
                 for i in range(1, depth)
             ]
         )
         self._central_block = nn.Sequential(
             OptionalMaxPool2d(optional_pool_base_size // 2**depth, 2) if optional_pool_base_size is not None else nn.MaxPool2d(2),
-            nn.Conv2d(base_channels * 2 ** (depth - 1), base_channels * 2**depth, kernel_size=3, padding=1),
+            conv_type(base_channels * 2 ** (depth - 1), base_channels * 2**depth, kernel_size=3, padding=1, **conv_kwargs),
             nn.ReLU(),
-            *[layer for _ in range(nonresize_convs_per_block) for layer in [nn.Conv2d(base_channels * 2**depth, base_channels * 2**depth, kernel_size=3, padding=1), nn.ReLU()]],
+            *[
+                layer
+                for _ in range(nonresize_convs_per_block)
+                for layer in [conv_type(base_channels * 2**depth, base_channels * 2**depth, kernel_size=3, padding=1, **conv_kwargs), nn.ReLU()]
+            ],
             SwitchedLayer(
                 nn.ConvTranspose2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=2, stride=2),
                 nn.ConvTranspose2d(base_channels * 2**depth, base_channels * 2 ** (depth - 1), kernel_size=1, stride=1),
@@ -123,9 +135,13 @@ class CustomUNet(UNetBase):
         self._up_blocks = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.Conv2d(base_channels * 2 ** (i + 1), base_channels * 2**i, kernel_size=3, padding=1),
+                    conv_type(base_channels * 2 ** (i + 1), base_channels * 2**i, kernel_size=3, padding=1, **conv_kwargs),
                     nn.ReLU(),
-                    *[layer for _ in range(nonresize_convs_per_block) for layer in [nn.Conv2d(base_channels * 2**i, base_channels * 2**i, kernel_size=3, padding=1), nn.ReLU()]],
+                    *[
+                        layer
+                        for _ in range(nonresize_convs_per_block)
+                        for layer in [conv_type(base_channels * 2**i, base_channels * 2**i, kernel_size=3, padding=1, **conv_kwargs), nn.ReLU()]
+                    ],
                     SwitchedLayer(
                         nn.ConvTranspose2d(base_channels * 2**i, base_channels * 2 ** (i - 1), kernel_size=2, stride=2),
                         nn.ConvTranspose2d(base_channels * 2**i, base_channels * 2 ** (i - 1), kernel_size=1, stride=1),
@@ -135,10 +151,10 @@ class CustomUNet(UNetBase):
             ]
             + [
                 nn.Sequential(
-                    nn.Conv2d(base_channels * 2, base_channels, kernel_size=3, padding=1),
+                    conv_type(base_channels * 2, base_channels, kernel_size=3, padding=1, **conv_kwargs),
                     nn.ReLU(),
-                    *[layer for _ in range(nonresize_convs_per_block) for layer in [nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1), nn.ReLU()]],
-                    nn.Conv2d(base_channels, out_channels, kernel_size=1),
+                    *[layer for _ in range(nonresize_convs_per_block) for layer in [conv_type(base_channels, base_channels, kernel_size=3, padding=1, **conv_kwargs), nn.ReLU()]],
+                    conv_type(base_channels, out_channels, kernel_size=1, **conv_kwargs),
                 )
             ]
         )
