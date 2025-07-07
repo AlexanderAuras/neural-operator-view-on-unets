@@ -182,7 +182,7 @@ def main() -> None:
     logger.info("Loading data")
     logger.info("Loading datasets")
     if args.smooth:
-        BASE_DATA_DIR = BASE_DATA_DIR / "smooth"
+        BASE_DATA_DIR = BASE_DATA_DIR / "smooth"  # pyright: ignore [reportConstantRedefinition]
     in_size = None
     match args.dataset:
         case "ellipses-64x64":
@@ -477,8 +477,8 @@ def main() -> None:
 
     # Create loss function, optimizer, and learning rate scheduler
     logger.info("Creating loss function, optimizer, and learning rate scheduler")
-    loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    loss_function = nn.MSELoss()
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.max_epochs)
 
     # Setting up model, metrics, data, etc. logging
@@ -548,6 +548,7 @@ def main() -> None:
                     if args.interp_mode:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # pyright: ignore [reportPrivateImportUsage]
                     if (batch_no + 1) % args.accumulation_steps == 0 or batch_no == len(train_dataloader) - 1:
+                        model.to("cpu")
                         optimizer.step()
                         if LOG_TRAIN_WEIGHTS_GRADS:
                             for name, parameter in model.named_parameters():
@@ -557,6 +558,7 @@ def main() -> None:
                                 if parameter.grad is not None and not (parameter.grad.isnan().any() or parameter.grad.isinf().any()) and parameter.grad.numel() > 1:
                                     tb_logger.add_histogram("train/" + name + ".grad", parameter.grad.flatten(), global_step=epoch * len(train_dataloader) + batch_no, bins="auto")
                         optimizer.zero_grad()
+                        model.to(args.devices[0])
                     with out_dir.joinpath("train-loss.csv").open("a") as file:
                         file.write(f"{epoch * len(train_dataloader) + batch_no},{acc_loss},{datetime.datetime.now().isoformat()}\n")
                     tb_logger.add_scalar("train/loss", acc_loss, global_step=epoch * len(train_dataloader) + batch_no)
