@@ -25,6 +25,8 @@ from typing import cast
 import warnings
 import zipfile
 
+from cno.CNOModule import CNO
+from neuralop.models import UNO
 import numpy as np
 import PIL.Image as Image
 import randomname
@@ -46,8 +48,6 @@ from fun.models.dncnn import DnCNN
 from fun.models.interp_unet import InterpolatingUNet
 from fun.models.spectral_unet import SpectralResUNet
 
-from CNO2d_original_version.CNOModule import CNO
-from neuralop.models import UNO
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
 BASE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -183,6 +183,7 @@ def main() -> None:
     logger.info("Loading datasets")
     if args.smooth:
         BASE_DATA_DIR = BASE_DATA_DIR / "smooth"
+    in_size = None
     match args.dataset:
         case "ellipses-64x64":
             in_size = 64
@@ -272,7 +273,8 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 256, 256)
         case "ellipses-mixed":
-            # TODO error for model == 'cno'
+            if args.model == "unet-interp":
+                raise ValueError("Model 'cno' is not supported for datasets with variable resolutions")
             train_datasets = [
                 CTPostProcessDataset(
                     EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
@@ -341,6 +343,8 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 256, 256)
         case "ellipses-sweep":
+            if args.model == "unet-interp":
+                raise ValueError("Model 'cno' is not supported for datasets with variable resolutions")
             train_dataset = cast(torch.utils.data.Dataset[dict[str, Tensor]], [{"input": torch.empty(0), "target": torch.empty(0)}])
             train_batch_sampler = MultiResolutionBatchSampler([1], batch_size=args.batch_size, shuffle=True, drop_incomplete=False)
             val_datasets = {}
