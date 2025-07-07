@@ -1,3 +1,15 @@
+# import os, sys
+# sys.path.append(os.path.join(os.getcwd(), '..'))
+
+# for desired_path in ('/software/gcc/10.5/bin', '/usr/local/cuda-12.1/bin'):
+#     print(desired_path, end='')
+#     if desired_path not in os.environ['PATH']:
+#         print(" - adding")
+#         os.environ['PATH'] = f"{desired_path}:{os.environ['PATH']}"
+#     else:
+#         print(" - already added")
+# print(os.environ['PATH'])
+
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
 import datetime
@@ -13,7 +25,6 @@ from typing import cast
 import warnings
 import zipfile
 
-# from neuralop.models import UNO
 import numpy as np
 import PIL.Image as Image
 import randomname
@@ -32,10 +43,11 @@ from fun.data.ellipses_dataset import EllipsesDataset
 from fun.data.multi_res_batch_sampler import MultiResolutionBatchSampler
 from fun.models.custom_unet import CustomUNet
 from fun.models.dncnn import DnCNN
-from fun.models.fno_unet import HeatUNet
 from fun.models.interp_unet import InterpolatingUNet
-from fun.models.spectral_unet import SmallResUNet, SpectralResUNet
+from fun.models.spectral_unet import SpectralResUNet
 
+from CNO2d_original_version.CNOModule import CNO
+from neuralop.models import UNO
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
 BASE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -89,9 +101,8 @@ def main() -> None:
     argparser.add_argument("--forced-run-name", type=str, default=None)
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
-    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "heat", "uno", "specResU", "spatResU", "specRes", "smallResU", "unet-custom"], required=True)
+    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "specResU", "spatResU", "specRes", "smallResU", "unet-custom", "cno", "uno"], required=True)
     argparser.add_argument("--kbase", type=int, default=256)
-    # argparser.add_argument("--flexi-modes", nargs="+", choices=["classic", "fno", "jump", "diff", "interp", "combi"], default=["diff", "fno", "fno"])
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
     argparser.add_argument("--batch-size", type=int, default=32)
@@ -174,6 +185,7 @@ def main() -> None:
         BASE_DATA_DIR = BASE_DATA_DIR / "smooth"
     match args.dataset:
         case "ellipses-64x64":
+            in_size = 64
             train_dataset = CTPostProcessDataset(
                 EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
                 angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
@@ -202,6 +214,7 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 64, 64)
         case "ellipses-128x128":
+            in_size = 128
             train_dataset = CTPostProcessDataset(
                 EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
                 angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
@@ -230,6 +243,7 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 128, 128)
         case "ellipses-256x256":
+            in_size = 256
             train_dataset = CTPostProcessDataset(
                 EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
                 angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
@@ -258,6 +272,7 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 256, 256)
         case "ellipses-mixed":
+            # TODO error for model == 'cno'
             train_datasets = [
                 CTPostProcessDataset(
                     EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
@@ -387,18 +402,14 @@ def main() -> None:
             model = DnCNN(1, use_checkpointing=args.use_checkpointing)
         case "unet-interp":
             model = InterpolatingUNet(1, 1, base_input_size=64, max_scale_factor=4, use_checkpointing=args.use_checkpointing)
-        # case "fno":
-        #     model = FNOUNet(1, 1, use_checkpointing=args.use_checkpointing)
-        case "heat":
-            model = HeatUNet(1, 1)
         case "specResU":
             model = SpectralResUNet(1, 1, parametrization="spectral", u_shape=True, kbase1=args.kbase, kbase2=args.kbase)
         case "specRes":
             model = SpectralResUNet(1, 1, parametrization="spectral", u_shape=False, kbase1=args.kbase, kbase2=args.kbase)
         case "spatResU":
             model = SpectralResUNet(1, 1, parametrization="spatial", u_shape=True, kbase1=args.kbase, kbase2=args.kbase)
-        case "smallResU":
-            model = SmallResUNet(1, 1)
+        case "cno":
+            model = CNO(in_dim=1, in_size=in_size, N_layers=4, N_res=3, N_res_neck=3, channel_multiplier=128)
         case "unet-custom":
             model = CustomUNet(
                 1,
@@ -407,23 +418,19 @@ def main() -> None:
                 nonresize_convs_per_block=args.unet_convs,
                 optional_pool_base_size=args.pooling_base_size,
             )
-        # case "flexi":
-        #     model = FlexiUNet(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
-        # case "flexi_res":
-        #     model = FlexiUNet_Res(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
-        # case "uno":
-        #     model = UNO(
-        #         1,
-        #         1,
-        #         64,
-        #         n_layers=9,
-        #         uno_out_channels=[64, 128, 256, 512, 1024, 512, 256, 128, 64],
-        #         uno_n_modes=[[256, 256], [128, 128], [64, 64], [32, 32], [16, 16], [32, 32], [64, 64], [128, 128], [256, 256]],
-        #         uno_scalings=[[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]],
-        #         skip="linear",
-        #         fno_skip="linear",
-        #         channel_mlp_skip="linear",
-        #     )
+        case "uno":
+            model = UNO(
+                1,
+                1,
+                64,
+                n_layers=9,
+                uno_out_channels=[64, 128, 256, 512, 1024, 512, 256, 128, 64],
+                uno_n_modes=[[256, 256], [128, 128], [64, 64], [32, 32], [16, 16], [32, 32], [64, 64], [128, 128], [256, 256]],
+                uno_scalings=[[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]],
+                skip="linear",
+                fno_skip="linear",
+                channel_mlp_skip="linear",
+            )
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     logger.info("Rendering compute graph")
@@ -620,7 +627,7 @@ def main() -> None:
         logger.info("Saving final weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
         torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
-        if args.model not in ["fno", "heat", "uno", "specResU", "specRes", "spatResU", "spatU"]:
+        if args.model not in ["specResU", "specRes", "spatResU", "cno", "uno"]:
             logger.info("Exporting weights to ONNX")
             logger.debug(f"    Path: {out_dir / 'model.onnx'}")
             with warnings.catch_warnings():

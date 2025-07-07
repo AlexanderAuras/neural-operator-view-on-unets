@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from typing_extensions import override
 
 
-## Adapted from: https://github.com/neuraloperator/neuraloperator/blob/main/neuralop/layers/differential_conv.py#L86
+## Adapted from: https://github.com/neuraloperator/neuraloperator/blob/main/neuralop/layers/differential_conv.py
 class DiffConv2d(nn.Module):
     def __init__(
         self,
@@ -13,17 +13,17 @@ class DiffConv2d(nn.Module):
         kernel_size: int,
         padding: int,
         zero_mean: bool = False,
-        scale: bool = False,
-        scale_factor: float = 1.0,
+        scale: bool = True,
+        scale_factor: float = 256.0,
         bias: bool = True,
     ) -> None:
         super().__init__()
         self.zero_mean = zero_mean
         self.padding = padding
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, bias=bias, padding=padding)
-        self.weight = self.conv.weight
+        conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, bias=bias, padding=padding)
+        self.weight = conv.weight
         if bias:
-            self.bias = self.conv.bias
+            self.bias = conv.bias
         else:
             self.bias = None
         self.scale = scale
@@ -34,15 +34,14 @@ class DiffConv2d(nn.Module):
         conv = F.conv2d(x, self.weight, padding=self.padding)
         kernel_sum = torch.sum(self.weight, dim=(-2, -1), keepdim=True)
         conv_sum = F.conv2d(x, kernel_sum)
-        bias = F.conv2d(x, torch.zeros_like(kernel_sum), bias=self.bias)
         if self.scale:
             grid_width = self.scale_factor / x.shape[-1]
         else:
-            grid_width = self.scale_factor
+            grid_width = 1.0
         if self.zero_mean:
-            return (conv - conv_sum) / grid_width + bias  # K(N)x + b
+            return (conv - conv_sum) / grid_width + self.bias.unsqueeze(-1).unsqueeze(-1)  # K(N)x + b
         else:
-            return (conv - conv_sum) / grid_width + conv_sum + bias  # K(N)x + cx + b
+            return conv/grid_width + (1-1/grid_width)*conv_sum + self.bias.unsqueeze(-1).unsqueeze(-1)  # K(N)x + cx + b
 
 
 class EasyDiffs(nn.Module):
