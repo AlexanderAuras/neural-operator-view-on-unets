@@ -68,11 +68,14 @@
                 "unet",
                 "dncnn",
                 "unet-interp",
-                "heat",
-                "spectral",
-                "uno"
+                "uno",
+                "cno",
+                "specResU",
+                "spatResU",
+                "specRes",
+                "unet-custom"
             ],
-            "default": "classic",
+            "default": "unet",
         }
     ]
 }

@@ -25,6 +25,8 @@ from typing import cast
 import warnings
 import zipfile
 
+from cno.CNOModule import CNO
+from neuralop.models import UNO
 import numpy as np
 import PIL.Image as Image
 import randomname
@@ -46,8 +48,6 @@ from fun.models.dncnn import DnCNN
 from fun.models.interp_unet import InterpolatingUNet
 from fun.models.spectral_unet import SpectralResUNet
 
-from CNO2d_original_version.CNOModule import CNO
-from neuralop.models import UNO
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
 BASE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -110,7 +110,7 @@ def main() -> None:
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
     argparser.add_argument("--model-save-freq", type=int, default=1)
-    argparser.add_argument("--noise-level", type=float, default=0.0)
+    argparser.add_argument("--noise-level", type=float, default=0.1)
     argparser.add_argument("--angle-percent", type=float, default=0.75)
     argparser.add_argument("--num-ellipses", type=int, default=10)
     argparser.add_argument("--smooth-data", dest="smooth", action="store_true")
@@ -182,7 +182,8 @@ def main() -> None:
     logger.info("Loading data")
     logger.info("Loading datasets")
     if args.smooth:
-        BASE_DATA_DIR = BASE_DATA_DIR / "smooth"
+        BASE_DATA_DIR = BASE_DATA_DIR / "smooth"  # pyright: ignore [reportConstantRedefinition]
+    in_size = None
     match args.dataset:
         case "ellipses-64x64":
             in_size = 64
@@ -272,7 +273,8 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 256, 256)
         case "ellipses-mixed":
-            # TODO error for model == 'cno'
+            if args.model == "unet-interp":
+                raise ValueError("Model 'cno' is not supported for datasets with variable resolutions")
             train_datasets = [
                 CTPostProcessDataset(
                     EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
@@ -341,6 +343,8 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 256, 256)
         case "ellipses-sweep":
+            if args.model == "unet-interp":
+                raise ValueError("Model 'cno' is not supported for datasets with variable resolutions")
             train_dataset = cast(torch.utils.data.Dataset[dict[str, Tensor]], [{"input": torch.empty(0), "target": torch.empty(0)}])
             train_batch_sampler = MultiResolutionBatchSampler([1], batch_size=args.batch_size, shuffle=True, drop_incomplete=False)
             val_datasets = {}
@@ -353,9 +357,9 @@ def main() -> None:
                     noise_type="gaussian",
                     noise_level=args.noise_level,
                 )
-                for r in range(*((64, 257, 64) if args.model == "unet-interp" else (16, 305, 16)))
+                for r in range(*((64, 1025, 64) if args.model == "unet-interp" else (16, 1025, 16)))
             }
-            exemplary_image_shape = (1, 256, 256) if args.model == "unet-interp" else (1, 304, 304)
+            exemplary_image_shape = (1, 256, 256)
         case _:
             raise ValueError(f'Unknown dataset: "{args.dataset}"')
     logger.info("Creating dataloaders")
@@ -473,8 +477,8 @@ def main() -> None:
 
     # Create loss function, optimizer, and learning rate scheduler
     logger.info("Creating loss function, optimizer, and learning rate scheduler")
-    loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    loss_function = nn.MSELoss()
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.max_epochs)
 
     # Setting up model, metrics, data, etc. logging
@@ -532,17 +536,19 @@ def main() -> None:
                 model.train()
                 batches_iter = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc="Training", unit="batch", position=1, leave=False)
                 optimizer.zero_grad()
+                acc_loss = 0.0
                 for batch_no, sample in batches_iter:
                     input_ = sample["input"].to(args.devices[0])
                     target = sample["target"].to(args.devices[0])
                     with torch.enable_grad():
                         prediction = fwd_func(input_)
-                        loss = loss_function(prediction, target) * ((input_.shape[-1] / 100) if args.interp_mode else 1)
-                        loss = loss / args.accumulation_steps
-                    loss.backward()
+                        loss = loss_function(prediction, target) * ((input_.shape[-1] / 100) if args.interp_mode else 1) / args.accumulation_steps
+                        loss.backward()
+                    acc_loss += loss.item()
                     if args.interp_mode:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # pyright: ignore [reportPrivateImportUsage]
                     if (batch_no + 1) % args.accumulation_steps == 0 or batch_no == len(train_dataloader) - 1:
+                        model.to("cpu")
                         optimizer.step()
                         if LOG_TRAIN_WEIGHTS_GRADS:
                             for name, parameter in model.named_parameters():
@@ -552,10 +558,11 @@ def main() -> None:
                                 if parameter.grad is not None and not (parameter.grad.isnan().any() or parameter.grad.isinf().any()) and parameter.grad.numel() > 1:
                                     tb_logger.add_histogram("train/" + name + ".grad", parameter.grad.flatten(), global_step=epoch * len(train_dataloader) + batch_no, bins="auto")
                         optimizer.zero_grad()
+                        model.to(args.devices[0])
                     with out_dir.joinpath("train-loss.csv").open("a") as file:
-                        file.write(f"{epoch * len(train_dataloader) + batch_no},{loss.item()},{datetime.datetime.now().isoformat()}\n")
-                    tb_logger.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + batch_no)
-                    batches_iter.set_postfix({"Train-Loss": loss.item()})
+                        file.write(f"{epoch * len(train_dataloader) + batch_no},{acc_loss},{datetime.datetime.now().isoformat()}\n")
+                    tb_logger.add_scalar("train/loss", acc_loss, global_step=epoch * len(train_dataloader) + batch_no)
+                    batches_iter.set_postfix({"Train-Loss": acc_loss})
                 batches_iter.close()
 
                 # Validate model

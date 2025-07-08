@@ -83,7 +83,7 @@ class CustomUNet(UNetBase):
         use_checkpointing: bool = False,
         optional_pool_base_size: int | None = None,
         conv_type: type[nn.Module] = nn.Conv2d,
-        conv_kwargs: dict[str, Any] = {},
+        conv_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """
         Args:
@@ -93,6 +93,7 @@ class CustomUNet(UNetBase):
             base_channels: The number of channels to convolve the input to in the first block.
         """
         super().__init__(in_channels, out_channels, depth, base_channels, use_checkpointing)
+        conv_kwargs = conv_kwargs if conv_kwargs is not None else {}
         self.__optional_pool_base_size = optional_pool_base_size
         self._down_blocks = nn.ModuleList(
             [
