@@ -42,10 +42,11 @@
             },
             "command": "${command:python.interpreterPath}",
             "args": [
-                "${input:n}",
                 "${workspaceFolder}/fun/data/gen_data.py",
+                "${input:n}",
                 "${input:output_dir}",
                 "--dataset=${input:dataset}",
+                "--device=cuda"
             ],
             "problemMatcher": [],
         }
