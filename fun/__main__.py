@@ -1,14 +1,18 @@
-# import os, sys
-# sys.path.append(os.path.join(os.getcwd(), '..'))
-
-# for desired_path in ('/software/gcc/10.5/bin', '/usr/local/cuda-12.1/bin'):
-#     print(desired_path, end='')
-#     if desired_path not in os.environ['PATH']:
+# import os
+# import sys
+#
+#
+# sys.path.append(os.path.join(os.getcwd(), ".."))
+#
+# for desired_path in ("/software/gcc/10.5/bin", "/usr/local/cuda-12.1/bin"):
+#     print(desired_path, end="")
+#     if desired_path not in os.environ["PATH"]:
 #         print(" - adding")
-#         os.environ['PATH'] = f"{desired_path}:{os.environ['PATH']}"
+#         os.environ["PATH"] = f"{desired_path}:{os.environ['PATH']}"
 #     else:
 #         print(" - already added")
-# print(os.environ['PATH'])
+# print(os.environ["PATH"])
+
 
 import argparse
 from contextlib import redirect_stderr, redirect_stdout

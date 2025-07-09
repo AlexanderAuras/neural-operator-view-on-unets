@@ -43,6 +43,7 @@
             ],
             "env": {
                 "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+                "CUDA_HOME": "/home/alexander/anaconda3/envs/FNO-UNet",
                 "LD_LIBRARY_PATH": "${env:LD_LIBRARY_PATH}:/home/alexander/anaconda3/envs/FNO-UNet/lib/python3.11/site-packages/nvidia/cufft/lib:/home/aa609734/.conda/envs/FNO-UNet/lib/python3.11/site-packages/nvidia/cufft/lib",
             },
         },
@@ -74,7 +75,8 @@
                 "specResU",
                 "spatResU",
                 "specRes",
-                "unet-custom"
+                "unet-custom",
+                "diff"
             ],
             "default": "unet",
         }
