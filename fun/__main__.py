@@ -422,7 +422,7 @@ def main() -> None:
         case "unet":
             model = CustomUNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=args.unet_convs)
         case "diff":
-            model = CustomUNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=args.unet_convs, conv_type=DiffConv2d, conv_kwargs={})
+            model = CustomUNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=args.unet_convs, conv_type=DiffConv2d, conv_kwargs={"padding": 1})
         case "dncnn":
             model = DnCNN(1, use_checkpointing=args.use_checkpointing)
         case "unet-interp":
@@ -436,13 +436,7 @@ def main() -> None:
         case "cno":
             model = CNO(in_dim=1, in_size=in_size, N_layers=4, N_res=3, N_res_neck=3, channel_multiplier=128)
         case "unet-custom":
-            model = CustomUNet(
-                1,
-                1,
-                use_checkpointing=args.use_checkpointing,
-                nonresize_convs_per_block=args.unet_convs,
-                optional_pool_base_size=args.pooling_base_size,
-            )
+            model = CustomUNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=args.unet_convs, optional_pool_base_size=args.pooling_base_size)
         case "uno":
             model = UNO(
                 1,
@@ -560,7 +554,6 @@ def main() -> None:
                 model.train()
                 batches_iter = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc="Training", unit="batch", position=1, leave=False)
                 optimizer.zero_grad()
-                acc_loss = 0.0
                 for batch_no, sample in batches_iter:
                     input_ = sample["input"].to(args.devices[0])
                     target = sample["target"].to(args.devices[0])
@@ -571,7 +564,6 @@ def main() -> None:
                         prediction = fwd_func(input_)
                         loss = loss_function(prediction, target) * ((input_.shape[-1] / 100) if args.interp_mode else 1) / args.accumulation_steps
                         loss.backward()
-                    acc_loss += loss.item()
                     if args.interp_mode:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # pyright: ignore [reportPrivateImportUsage]
                     if (batch_no + 1) % args.accumulation_steps == 0 or batch_no == len(train_dataloader) - 1:
@@ -589,9 +581,9 @@ def main() -> None:
                         if args.cpu_opt_state:
                             model.to(args.devices[0])
                     with out_dir.joinpath("train-loss.csv").open("a") as file:
-                        file.write(f"{epoch * len(train_dataloader) + batch_no},{acc_loss},{datetime.datetime.now().isoformat()}\n")
-                    tb_logger.add_scalar("train/loss", acc_loss, global_step=epoch * len(train_dataloader) + batch_no)
-                    batches_iter.set_postfix({"Train-Loss": acc_loss})
+                        file.write(f"{epoch * len(train_dataloader) + batch_no},{loss.item()},{datetime.datetime.now().isoformat()}\n")
+                    tb_logger.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + batch_no)
+                    batches_iter.set_postfix({"Train-Loss": loss.item()})
                 batches_iter.close()
 
                 # Validate model

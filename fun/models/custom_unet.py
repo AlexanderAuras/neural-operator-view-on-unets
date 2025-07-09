@@ -155,7 +155,7 @@ class CustomUNet(UNetBase):
                     conv_type(base_channels * 2, base_channels, kernel_size=3, padding=1, **conv_kwargs),
                     nn.ReLU(),
                     *[layer for _ in range(nonresize_convs_per_block) for layer in [conv_type(base_channels, base_channels, kernel_size=3, padding=1, **conv_kwargs), nn.ReLU()]],
-                    conv_type(base_channels, out_channels, kernel_size=1, **conv_kwargs),
+                    conv_type(base_channels, out_channels, kernel_size=1, padding=0, **conv_kwargs),
                 )
             ]
         )
