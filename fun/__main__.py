@@ -422,7 +422,7 @@ def main() -> None:
         case "unet":
             model = CustomUNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=args.unet_convs)
         case "diff":
-            model = CustomUNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=args.unet_convs, conv_type=DiffConv2d, conv_kwargs={"padding": 1})
+            model = CustomUNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=args.unet_convs, conv_type=DiffConv2d, conv_kwargs={})
         case "dncnn":
             model = DnCNN(1, use_checkpointing=args.use_checkpointing)
         case "unet-interp":
