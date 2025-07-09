@@ -31,7 +31,7 @@
             "problemMatcher": [],
         },
         {
-            "label": "Generate Test-Data",
+            "label": "Generate data",
             "type": "shell",
             "options": {
                 "cwd": "${workspaceFolder}",
@@ -42,7 +42,8 @@
             },
             "command": "${command:python.interpreterPath}",
             "args": [
-                "${workspaceFolder}/fun/gen_test_data.py",
+                "${input:n}",
+                "${workspaceFolder}/fun/data/gen_data.py",
                 "${input:output_dir}",
                 "--dataset=${input:dataset}",
             ],
@@ -64,6 +65,12 @@
             "type": "promptString",
             "description": "Select the directory to save the generated test data to",
             "default": "${workspaceFolder}/data",
+        },
+        {
+            "id": "n",
+            "type": "promptString",
+            "description": "Enter the mount of samples to generate",
+            "default": "2000",
         }
     ]
 }

@@ -18,6 +18,7 @@ from fun.utils.formatters import ColoringIndentingFormatter
 def main() -> None:
     # Parse command line arguments
     argparser = argparse.ArgumentParser()
+    argparser.add_argument("n", type=int, default=2000)
     argparser.add_argument("--seed", type=int, default=random.randrange(0, 2**32))
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--device", type=torch.device, default=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
@@ -25,7 +26,8 @@ def main() -> None:
     argparser.add_argument("--noise-level", type=float, default=0.0)
     argparser.add_argument("--angle-percent", type=float, default=0.75)
     argparser.add_argument("--num-ellipses", type=int, default=10)
-    argparser.add_argument("out_dir", type=Path)
+    argparser.add_argument("--similar", action="store_true")
+    argparser.add_argument("out", type=Path)
     argparser.add_argument("--smooth-data", dest="smooth", action="store_true")
     args = argparser.parse_args()
 
@@ -58,10 +60,10 @@ def main() -> None:
     logger.info("Creating datasets")
     match args.dataset:
         case "ellipses":
-            test_dataset = EllipsesDataset(2000, 1024, args.num_ellipses, smooth = args.smooth)
-            test_datasets = {
+            dataset = EllipsesDataset(args.n, 1024, args.num_ellipses, smooth=args.smooth)
+            all_datasets = {
                 "64x64": CTPostProcessDataset(
-                    test_dataset,
+                    dataset if args.similar else EllipsesDataset(args.n, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
                     pos_count=128,
                     target_shape=(64, 64),
@@ -70,7 +72,7 @@ def main() -> None:
                     radon_device=args.device,
                 ),
                 "128x128": CTPostProcessDataset(
-                    test_dataset,
+                    dataset if args.similar else EllipsesDataset(args.n, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
                     pos_count=256,
                     target_shape=(128, 128),
@@ -79,7 +81,7 @@ def main() -> None:
                     radon_device=args.device,
                 ),
                 "256x256": CTPostProcessDataset(
-                    test_dataset,
+                    dataset if args.similar else EllipsesDataset(args.n, 1024, args.num_ellipses, smooth=args.smooth),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
                     pos_count=512,
                     target_shape=(256, 256),
@@ -92,11 +94,11 @@ def main() -> None:
             raise ValueError(f'Unknown dataset: "{args.dataset}"')
 
     logger.info("Saving datasets to file")
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    for name, dataset in test_datasets.items():
-        dataset.save_to_file(args.out_dir / f"test-{name}.h5", progress=True)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    for name, dataset in all_datasets.items():
+        dataset.save_to_file(args.out.with_name(args.out.name.format(name)).with_suffix(".h5"), progress=True)
         logger.info(f"Saved {name} dataset to file")
-        logger.debug(f"    Path: {args.out_dir / f'test-{name}.h5'}")
+        logger.debug(f"    Path: {args.out.with_name(args.out.name.format(name)).with_suffix('.h5')}")
 
     logger.info("Data generated successfully")
 

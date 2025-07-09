@@ -1,3 +1,5 @@
+from typing import cast
+
 import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
@@ -39,9 +41,9 @@ class DiffConv2d(nn.Module):
         else:
             grid_width = 1.0
         if self.zero_mean:
-            return (conv - conv_sum) / grid_width + self.bias.unsqueeze(-1).unsqueeze(-1)  # K(N)x + b
+            return (conv - conv_sum) / grid_width + cast(Tensor, self.bias).unsqueeze(-1).unsqueeze(-1)  # K(N)x + b
         else:
-            return conv/grid_width + (1-1/grid_width)*conv_sum + self.bias.unsqueeze(-1).unsqueeze(-1)  # K(N)x + cx + b
+            return conv / grid_width + (1 - 1 / grid_width) * conv_sum + cast(Tensor, self.bias).unsqueeze(-1).unsqueeze(-1)  # K(N)x + cx + b
 
 
 class EasyDiffs(nn.Module):
