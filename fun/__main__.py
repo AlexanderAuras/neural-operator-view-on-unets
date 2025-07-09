@@ -1,3 +1,15 @@
+# import os, sys
+# sys.path.append(os.path.join(os.getcwd(), '..'))
+
+# for desired_path in ('/software/gcc/10.5/bin', '/usr/local/cuda-12.1/bin'):
+#     print(desired_path, end='')
+#     if desired_path not in os.environ['PATH']:
+#         print(" - adding")
+#         os.environ['PATH'] = f"{desired_path}:{os.environ['PATH']}"
+#     else:
+#         print(" - already added")
+# print(os.environ['PATH'])
+
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
 import datetime
@@ -13,7 +25,8 @@ from typing import cast
 import warnings
 import zipfile
 
-# from neuralop.models import UNO
+from cno.CNOModule import CNO
+from neuralop.models import UNO
 import numpy as np
 import PIL.Image as Image
 import randomname
@@ -30,11 +43,11 @@ from tqdm.auto import tqdm, trange
 from fun.data.ct_dataset import CTPostProcessDataset
 from fun.data.ellipses_dataset import EllipsesDataset
 from fun.data.multi_res_batch_sampler import MultiResolutionBatchSampler
-from fun.models.classical_unet import UNet
+from fun.models.custom_unet import CustomUNet
 from fun.models.dncnn import DnCNN
-from fun.models.fno_unet import HeatUNet
 from fun.models.interp_unet import InterpolatingUNet
-from fun.models.spectral_unet import SpectralResUNet, SpectralUNet
+from fun.models.spectral_unet import SpectralResUNet
+from fun.utils.diff_utils import DiffConv2d
 
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
@@ -89,8 +102,8 @@ def main() -> None:
     argparser.add_argument("--forced-run-name", type=str, default=None)
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
     argparser.add_argument("--dataset", choices=["ellipses-64x64", "ellipses-128x128", "ellipses-256x256", "ellipses-mixed", "ellipses-sweep"], required=True)
-    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "heat", "uno", "specResU", "spatResU", "specRes", "spatU"], required=True)
-    # argparser.add_argument("--flexi-modes", nargs="+", choices=["classic", "fno", "jump", "diff", "interp", "combi"], default=["diff", "fno", "fno"])
+    argparser.add_argument("--model", choices=["unet", "dncnn", "unet-interp", "specResU", "spatResU", "specRes", "smallResU", "unet-custom", "cno", "uno", "diff"], required=True)
+    argparser.add_argument("--kbase", type=int, default=256)
     argparser.add_argument("--weights", type=Path, default=None)
     argparser.add_argument("--test-only", action="store_true")
     argparser.add_argument("--batch-size", type=int, default=32)
@@ -98,10 +111,15 @@ def main() -> None:
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
     argparser.add_argument("--model-save-freq", type=int, default=1)
-    argparser.add_argument("--noise-level", type=float, default=0.0)
+    argparser.add_argument("--noise-level", type=float, default=0.1)
     argparser.add_argument("--angle-percent", type=float, default=0.75)
     argparser.add_argument("--num-ellipses", type=int, default=10)
     argparser.add_argument("--smooth-data", dest="smooth", action="store_true")
+    argparser.add_argument("--interp-mode", action="store_true")
+    argparser.add_argument("--unet-convs", type=int, default=1)
+    argparser.add_argument("--pooling-base-size", type=int, default=None)
+    argparser.add_argument("--cpu-opt-state", action="store_true")
+    argparser.add_argument("--resize-input-size", type=int, default=None)
     args = argparser.parse_args()
 
     if args.forced_run_name is not None:
@@ -167,29 +185,35 @@ def main() -> None:
     logger.info("Loading data")
     logger.info("Loading datasets")
     if args.smooth:
-        BASE_DATA_DIR = BASE_DATA_DIR / "smooth"
+        BASE_DATA_DIR = BASE_DATA_DIR / "smooth"  # pyright: ignore [reportConstantRedefinition]
+    in_size = None
     match args.dataset:
         case "ellipses-64x64":
-            train_dataset = CTPostProcessDataset(
-                EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
-                angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-                pos_count=128,
-                target_shape=(64, 64),
-                noise_type="gaussian",
-                noise_level=args.noise_level,
-                radon_device=args.devices[0],
-            )
+            in_size = 64
+            # train_dataset = CTPostProcessDataset(
+            #     EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
+            #     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+            #     pos_count=128,
+            #     target_shape=(64, 64),
+            #     noise_type="gaussian",
+            #     noise_level=args.noise_level,
+            #     radon_device=args.devices[0],
+            # )
+            train_dataset = CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-64x64.h5")
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
+            # val_datasets = {
+            #     "64x64": CTPostProcessDataset(
+            #         EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
+            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+            #         pos_count=128,
+            #         target_shape=(64, 64),
+            #         noise_type="gaussian",
+            #         noise_level=args.noise_level,
+            #         radon_device=args.devices[0],
+            #     ),
+            # }
             val_datasets = {
-                "64x64": CTPostProcessDataset(
-                    EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-                    pos_count=128,
-                    target_shape=(64, 64),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.devices[0],
-                ),
+                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-64x64.h5"),
             }
             test_datasets = {
                 "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
@@ -198,26 +222,31 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 64, 64)
         case "ellipses-128x128":
-            train_dataset = CTPostProcessDataset(
-                EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
-                angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-                pos_count=256,
-                target_shape=(128, 128),
-                noise_type="gaussian",
-                noise_level=args.noise_level,
-                radon_device=args.devices[0],
-            )
+            in_size = 128
+            # train_dataset = CTPostProcessDataset(
+            #     EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
+            #     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+            #     pos_count=256,
+            #     target_shape=(128, 128),
+            #     noise_type="gaussian",
+            #     noise_level=args.noise_level,
+            #     radon_device=args.devices[0],
+            # )
+            train_dataset = CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-128x128.h5")
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
+            # val_datasets = {
+            #     "128x128": CTPostProcessDataset(
+            #         EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
+            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+            #         pos_count=256,
+            #         target_shape=(128, 128),
+            #         noise_type="gaussian",
+            #         noise_level=args.noise_level,
+            #         radon_device=args.devices[0],
+            #     ),
+            # }
             val_datasets = {
-                "128x128": CTPostProcessDataset(
-                    EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-                    pos_count=256,
-                    target_shape=(128, 128),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.devices[0],
-                ),
+                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-128x128.h5"),
             }
             test_datasets = {
                 "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
@@ -226,26 +255,31 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 128, 128)
         case "ellipses-256x256":
-            train_dataset = CTPostProcessDataset(
-                EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
-                angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-                pos_count=512,
-                target_shape=(256, 256),
-                noise_type="gaussian",
-                noise_level=args.noise_level,
-                radon_device=args.devices[0],
-            )
+            in_size = 256
+            # train_dataset = CTPostProcessDataset(
+            #     EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
+            #     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+            #     pos_count=512,
+            #     target_shape=(256, 256),
+            #     noise_type="gaussian",
+            #     noise_level=args.noise_level,
+            #     radon_device=args.devices[0],
+            # )
+            train_dataset = CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-256x256.h5")
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
+            # val_datasets = {
+            #     "256x256": CTPostProcessDataset(
+            #         EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
+            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+            #         pos_count=512,
+            #         target_shape=(256, 256),
+            #         noise_type="gaussian",
+            #         noise_level=args.noise_level,
+            #         radon_device=args.devices[0],
+            #     ),
+            # }
             val_datasets = {
-                "256x256": CTPostProcessDataset(
-                    EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-                    pos_count=512,
-                    target_shape=(256, 256),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.devices[0],
-                ),
+                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-256x256.h5"),
             }
             test_datasets = {
                 "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
@@ -254,67 +288,78 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 256, 256)
         case "ellipses-mixed":
+            if args.model == "unet-interp":
+                raise ValueError("Model 'cno' is not supported for datasets with variable resolutions")
+            # train_datasets = [
+            #     CTPostProcessDataset(
+            #         EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
+            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+            #         pos_count=128,
+            #         target_shape=(64, 64),
+            #         noise_type="gaussian",
+            #         noise_level=args.noise_level,
+            #         radon_device=args.devices[0],
+            #     ),
+            #     CTPostProcessDataset(
+            #         EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
+            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+            #         pos_count=256,
+            #         target_shape=(128, 128),
+            #         noise_type="gaussian",
+            #         noise_level=args.noise_level,
+            #         radon_device=args.devices[0],
+            #     ),
+            #     CTPostProcessDataset(
+            #         EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
+            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+            #         pos_count=512,
+            #         target_shape=(256, 256),
+            #         noise_type="gaussian",
+            #         noise_level=args.noise_level,
+            #         radon_device=args.devices[0],
+            #     ),
+            # ]
             train_datasets = [
-                CTPostProcessDataset(
-                    EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-                    pos_count=128,
-                    target_shape=(64, 64),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.devices[0],
-                ),
-                CTPostProcessDataset(
-                    EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-                    pos_count=256,
-                    target_shape=(128, 128),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.devices[0],
-                ),
-                CTPostProcessDataset(
-                    EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-                    pos_count=512,
-                    target_shape=(256, 256),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.devices[0],
-                ),
+                torch.utils.data.Subset(CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-64x64.h5"), range(2133)),
+                torch.utils.data.Subset(CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-128x128.h5"), range(2133)),
+                torch.utils.data.Subset(CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-256x256.h5"), range(2133)),
             ]
             train_dataset = torch.utils.data.ConcatDataset(train_datasets)
             train_batch_sampler = MultiResolutionBatchSampler([len(x) for x in train_datasets], batch_size=args.batch_size, shuffle=True, drop_incomplete=False)
+            # val_datasets = {
+            #     "64x64": CTPostProcessDataset(
+            #         EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
+            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+            #         pos_count=128,
+            #         target_shape=(64, 64),
+            #         noise_type="gaussian",
+            #         noise_level=args.noise_level,
+            #         radon_device=args.devices[0],
+            #     ),
+            #     "128x128": CTPostProcessDataset(
+            #         EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
+            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+            #         pos_count=256,
+            #         target_shape=(128, 128),
+            #         noise_type="gaussian",
+            #         noise_level=args.noise_level,
+            #         radon_device=args.devices[0],
+            #     ),
+            #     "256x256": CTPostProcessDataset(
+            #         EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
+            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+            #         pos_count=512,
+            #         target_shape=(256, 256),
+            #         noise_type="gaussian",
+            #         noise_level=args.noise_level,
+            #         radon_device=args.devices[0],
+            #     ),
+            # }
             val_datasets = {
-                "64x64": CTPostProcessDataset(
-                    EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-                    pos_count=128,
-                    target_shape=(64, 64),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.devices[0],
-                ),
-                "128x128": CTPostProcessDataset(
-                    EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-                    pos_count=256,
-                    target_shape=(128, 128),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.devices[0],
-                ),
-                "256x256": CTPostProcessDataset(
-                    EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-                    pos_count=512,
-                    target_shape=(256, 256),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.devices[0],
-                ),
+                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-64x64.h5"),
+                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-128x128.h5"),
+                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-256x256.h5"),
             }
-
             test_datasets = {
                 "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
                 "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
@@ -322,6 +367,8 @@ def main() -> None:
             }
             exemplary_image_shape = (1, 256, 256)
         case "ellipses-sweep":
+            if args.model == "cno" and args.resize_input_size is None:
+                raise ValueError("Model 'cno' is not supported for datasets with variable resolutions")
             train_dataset = cast(torch.utils.data.Dataset[dict[str, Tensor]], [{"input": torch.empty(0), "target": torch.empty(0)}])
             train_batch_sampler = MultiResolutionBatchSampler([1], batch_size=args.batch_size, shuffle=True, drop_incomplete=False)
             val_datasets = {}
@@ -334,9 +381,9 @@ def main() -> None:
                     noise_type="gaussian",
                     noise_level=args.noise_level,
                 )
-                for r in range(*((64, 257, 64) if args.model == "unet-interp" else (16, 305, 16)))
+                for r in range(*((64, 1025, 64) if args.model == "unet-interp" else (16, 1025, 16)))
             }
-            exemplary_image_shape = (1, 256, 256) if args.model == "unet-interp" else (1, 304, 304)
+            exemplary_image_shape = (1, 256, 256)
         case _:
             raise ValueError(f'Unknown dataset: "{args.dataset}"')
     logger.info("Creating dataloaders")
@@ -373,40 +420,42 @@ def main() -> None:
     logger.info("Creating model")
     match args.model:
         case "unet":
-            model = UNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=1)
+            model = CustomUNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=args.unet_convs)
+        case "diff":
+            model = CustomUNet(1, 1, use_checkpointing=args.use_checkpointing, nonresize_convs_per_block=args.unet_convs, conv_type=DiffConv2d, conv_kwargs={})
         case "dncnn":
             model = DnCNN(1, use_checkpointing=args.use_checkpointing)
         case "unet-interp":
             model = InterpolatingUNet(1, 1, base_input_size=64, max_scale_factor=4, use_checkpointing=args.use_checkpointing)
-        # case "fno":
-        #     model = FNOUNet(1, 1, use_checkpointing=args.use_checkpointing)
-        case "heat":
-            model = HeatUNet(1, 1)
         case "specResU":
-            model = SpectralResUNet(1, 1, parametrization="spectral", u_shape=True)
+            model = SpectralResUNet(1, 1, parametrization="spectral", u_shape=True, kbase1=args.kbase, kbase2=args.kbase)
         case "specRes":
-            model = SpectralResUNet(1, 1, parametrization="spectral", u_shape=False)
+            model = SpectralResUNet(1, 1, parametrization="spectral", u_shape=False, kbase1=args.kbase, kbase2=args.kbase)
         case "spatResU":
-            model = SpectralResUNet(1, 1, parametrization="spatial", u_shape=True)
-        case "spatU":
-            model = SpectralUNet(1, 1, parametrization="spatial", u_shape=True)
-        # case "flexi":
-        #     model = FlexiUNet(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
-        # case "flexi_res":
-        #     model = FlexiUNet_Res(1, 1, modes={"down": args.flexi_modes[0], "central": args.flexi_modes[1], "up": args.flexi_modes[2]})
-        # case "uno":
-        #     model = UNO(
-        #         1,
-        #         1,
-        #         64,
-        #         n_layers=9,
-        #         uno_out_channels=[64, 128, 256, 512, 1024, 512, 256, 128, 64],
-        #         uno_n_modes=[[256, 256], [128, 128], [64, 64], [32, 32], [16, 16], [32, 32], [64, 64], [128, 128], [256, 256]],
-        #         uno_scalings=[[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]],
-        #         skip="linear",
-        #         fno_skip="linear",
-        #         channel_mlp_skip="linear",
-        #     )
+            model = SpectralResUNet(1, 1, parametrization="spatial", u_shape=True, kbase1=args.kbase, kbase2=args.kbase)
+        case "cno":
+            model = CNO(in_dim=1, in_size=in_size, N_layers=4, N_res=3, N_res_neck=3, channel_multiplier=128)
+        case "unet-custom":
+            model = CustomUNet(
+                1,
+                1,
+                use_checkpointing=args.use_checkpointing,
+                nonresize_convs_per_block=args.unet_convs,
+                optional_pool_base_size=args.pooling_base_size,
+            )
+        case "uno":
+            model = UNO(
+                1,
+                1,
+                64,
+                n_layers=9,
+                uno_out_channels=[64, 64, 64, 64, 64, 64, 64, 64, 64],
+                uno_n_modes=[[256, 256], [128, 128], [64, 64], [32, 32], [16, 16], [32, 32], [64, 64], [128, 128], [256, 256]],
+                uno_scalings=[[1.0, 1.0], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [2.0, 2.0], [2.0, 2.0], [2.0, 2.0], [2.0, 2.0]],
+                skip="linear",
+                fno_skip="linear",
+                channel_mlp_skip="linear",
+            )
         case _:
             raise ValueError(f'Unknown model: "{args.model}"')
     logger.info("Rendering compute graph")
@@ -449,8 +498,8 @@ def main() -> None:
 
     # Create loss function, optimizer, and learning rate scheduler
     logger.info("Creating loss function, optimizer, and learning rate scheduler")
-    loss_function = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    loss_function = nn.MSELoss()
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.max_epochs)
 
     # Setting up model, metrics, data, etc. logging
@@ -467,8 +516,11 @@ def main() -> None:
             for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
                 input_ = sample["input"].to(args.devices[0])
                 target = sample["target"].to(args.devices[0])
+                if args.resize_input_size is not None:
+                    input_ = nn.functional.interpolate(input_, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
+                    target = nn.functional.interpolate(target, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
                 prediction = fwd_func(input_)
-                val_loss += loss_function(prediction, target).item()
+                val_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
                 if i == 0:
                     for j in range(min(4, input_.shape[0])):
                         out_dir.joinpath("val-imgs", f"{name}-input-{j}").mkdir(parents=True, exist_ok=True)
@@ -508,15 +560,23 @@ def main() -> None:
                 model.train()
                 batches_iter = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc="Training", unit="batch", position=1, leave=False)
                 optimizer.zero_grad()
+                acc_loss = 0.0
                 for batch_no, sample in batches_iter:
                     input_ = sample["input"].to(args.devices[0])
                     target = sample["target"].to(args.devices[0])
+                    if args.resize_input_size is not None:
+                        input_ = nn.functional.interpolate(input_, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
+                        target = nn.functional.interpolate(target, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
                     with torch.enable_grad():
                         prediction = fwd_func(input_)
-                        loss = loss_function(prediction, target)
-                        loss = loss / args.accumulation_steps
-                    loss.backward()
+                        loss = loss_function(prediction, target) * ((input_.shape[-1] / 100) if args.interp_mode else 1) / args.accumulation_steps
+                        loss.backward()
+                    acc_loss += loss.item()
+                    if args.interp_mode:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # pyright: ignore [reportPrivateImportUsage]
                     if (batch_no + 1) % args.accumulation_steps == 0 or batch_no == len(train_dataloader) - 1:
+                        if args.cpu_opt_state:
+                            model.to("cpu")
                         optimizer.step()
                         if LOG_TRAIN_WEIGHTS_GRADS:
                             for name, parameter in model.named_parameters():
@@ -526,10 +586,12 @@ def main() -> None:
                                 if parameter.grad is not None and not (parameter.grad.isnan().any() or parameter.grad.isinf().any()) and parameter.grad.numel() > 1:
                                     tb_logger.add_histogram("train/" + name + ".grad", parameter.grad.flatten(), global_step=epoch * len(train_dataloader) + batch_no, bins="auto")
                         optimizer.zero_grad()
+                        if args.cpu_opt_state:
+                            model.to(args.devices[0])
                     with out_dir.joinpath("train-loss.csv").open("a") as file:
-                        file.write(f"{epoch * len(train_dataloader) + batch_no},{loss.item()},{datetime.datetime.now().isoformat()}\n")
-                    tb_logger.add_scalar("train/loss", loss.item(), global_step=epoch * len(train_dataloader) + batch_no)
-                    batches_iter.set_postfix({"Train-Loss": loss.item()})
+                        file.write(f"{epoch * len(train_dataloader) + batch_no},{acc_loss},{datetime.datetime.now().isoformat()}\n")
+                    tb_logger.add_scalar("train/loss", acc_loss, global_step=epoch * len(train_dataloader) + batch_no)
+                    batches_iter.set_postfix({"Train-Loss": acc_loss})
                 batches_iter.close()
 
                 # Validate model
@@ -540,8 +602,11 @@ def main() -> None:
                     for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=2, leave=False):
                         input_ = sample["input"].to(args.devices[0])
                         target = sample["target"].to(args.devices[0])
+                        if args.resize_input_size is not None:
+                            input_ = nn.functional.interpolate(input_, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
+                            target = nn.functional.interpolate(target, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
                         prediction = fwd_func(input_)
-                        val_loss += loss_function(prediction, target).item()
+                        val_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
                         if i == 0:
                             for j in range(min(4, input_.shape[0])):
                                 out_dir.joinpath("val-imgs", f"{name}-input-{j}").mkdir(parents=True, exist_ok=True)
@@ -600,7 +665,7 @@ def main() -> None:
         logger.info("Saving final weights")
         logger.debug(f"    Path: {out_dir / 'weights' / 'final.pt'}")
         torch.save(model.state_dict(), out_dir / "weights" / "final.pt")
-        if args.model not in ["fno", "heat", "uno", "specResU", "specRes", "spatResU", "spatU"]:
+        if args.model not in ["specResU", "specRes", "spatResU", "cno", "uno"]:
             logger.info("Exporting weights to ONNX")
             logger.debug(f"    Path: {out_dir / 'model.onnx'}")
             with warnings.catch_warnings():
@@ -619,38 +684,45 @@ def main() -> None:
     out_dir.joinpath("test-imgs").mkdir(parents=True)
     all_test_loss = 0.0
     for name, dataloader in tqdm(test_dataloaders.items(), desc="Testing", unit="dataset", position=0, leave=True):
-        test_loss = 0.0
-        baseline_loss = 0.0
-        for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
-            input_ = sample["input"].to(args.devices[0])
-            target = sample["target"].to(args.devices[0])
-            prediction = fwd_func(input_)
-            test_loss += loss_function(prediction, target).item()
-            baseline_loss += loss_function(input_, target).item()
-            if i == 0:
-                for j in range(min(4, input_.shape[0])):
-                    np.save(out_dir / "test-imgs" / f"{name}-input-{j}.npy", input_[j].cpu().detach().numpy())
-                    np.save(out_dir / "test-imgs" / f"{name}-target-{j}.npy", target[j].cpu().detach().numpy())
-                    np.save(out_dir / "test-imgs" / f"{name}-prediction-{j}.npy", prediction[j].cpu().detach().numpy())
-                    filename = out_dir / "test-imgs" / f"{name}-input-{j}.png"
-                    Image.fromarray((normalized(input_[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                    filename = out_dir / "test-imgs" / f"{name}-target-{j}.png"
-                    Image.fromarray((normalized(target[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                    filename = out_dir / "test-imgs" / f"{name}-prediction-{j}.png"
-                    Image.fromarray((normalized(prediction[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
-                    tb_logger.add_image(f"test/{name}-input-{j}", normalized(input_[j]), global_step=0)
-                    tb_logger.add_image(f"test/{name}-target-{j}", normalized(target[j]), global_step=0)
-                    tb_logger.add_image(f"test/{name}-prediction-{j}", normalized(prediction[j]), global_step=0)
-        test_loss /= len(dataloader)
-        baseline_loss /= len(dataloader)
-        all_test_loss += test_loss
-        logger.info(f'Final test loss on "{name}": {test_loss:.3e}')
-        with out_dir.joinpath("test-results.csv").open("a") as file:
-            file.write(f"{name},loss,{test_loss}\n")
-        with out_dir.joinpath("baseline.csv").open("a") as file:
-            file.write(f"{name},loss,{baseline_loss}\n")
-        tb_logger.add_scalar(f"test/{name}-loss", test_loss, global_step=0)
-        tb_logger.add_scalar(f"baseline/{name}-loss", baseline_loss, global_step=0)
+        try:
+            test_loss = 0.0
+            baseline_loss = 0.0
+            for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
+                input_ = sample["input"].to(args.devices[0])
+                target = sample["target"].to(args.devices[0])
+                if args.resize_input_size is not None:
+                    input_ = nn.functional.interpolate(input_, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
+                    target = nn.functional.interpolate(target, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
+                prediction = fwd_func(input_)
+                test_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
+                baseline_loss += loss_function(input_, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
+                if i == 0:
+                    for j in range(min(4, input_.shape[0])):
+                        np.save(out_dir / "test-imgs" / f"{name}-input-{j}.npy", input_[j].cpu().detach().numpy())
+                        np.save(out_dir / "test-imgs" / f"{name}-target-{j}.npy", target[j].cpu().detach().numpy())
+                        np.save(out_dir / "test-imgs" / f"{name}-prediction-{j}.npy", prediction[j].cpu().detach().numpy())
+                        filename = out_dir / "test-imgs" / f"{name}-input-{j}.png"
+                        Image.fromarray((normalized(input_[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                        filename = out_dir / "test-imgs" / f"{name}-target-{j}.png"
+                        Image.fromarray((normalized(target[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                        filename = out_dir / "test-imgs" / f"{name}-prediction-{j}.png"
+                        Image.fromarray((normalized(prediction[j]) * 255.0).cpu().detach().to(torch.uint8).permute(1, 2, 0).squeeze(-1).numpy()).save(filename)
+                        tb_logger.add_image(f"test/{name}-input-{j}", normalized(input_[j]), global_step=0)
+                        tb_logger.add_image(f"test/{name}-target-{j}", normalized(target[j]), global_step=0)
+                        tb_logger.add_image(f"test/{name}-prediction-{j}", normalized(prediction[j]), global_step=0)
+            test_loss /= len(dataloader)
+            baseline_loss /= len(dataloader)
+            all_test_loss += test_loss
+            logger.info(f'Final test loss on "{name}": {test_loss:.3e}')
+            with out_dir.joinpath("test-results.csv").open("a") as file:
+                file.write(f"{name},loss,{test_loss}\n")
+            with out_dir.joinpath("baseline.csv").open("a") as file:
+                file.write(f"{name},loss,{baseline_loss}\n")
+            tb_logger.add_scalar(f"test/{name}-loss", test_loss, global_step=0)
+            tb_logger.add_scalar(f"baseline/{name}-loss", baseline_loss, global_step=0)
+        except Exception as e:
+            logger.error(f"Error during testing on dataset {name}: {e}")
+            continue
     all_test_loss /= len(test_dataloaders)
     with out_dir.joinpath("test-results.csv").open("a") as file:
         file.write(f"all-avg,loss,{all_test_loss}\n")

@@ -100,7 +100,6 @@ def create_conv_layer(parametrization: Literal["spectral", "spatial"], in_channe
     else:
         return nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=kernel_size // 2, padding_mode="circular")
 
-
 class SpectralResUNet(MultiDimUNet):
     def __init__(
         self,
@@ -125,7 +124,11 @@ class SpectralResUNet(MultiDimUNet):
         self.kernel_size = kernel_size
 
         ## Convolutional Layers
-        self._first_block = nn.Sequential(create_conv_layer(self.parametrization, in_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size), nn.ReLU())
+        self._first_block = nn.Sequential(
+            create_conv_layer(self.parametrization, in_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size),
+            nn.ReLU(),
+            Residual_Layer(create_conv_layer(self.parametrization, base_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size), nn.ReLU()),
+        )
 
         self._down_conv_layers = nn.ModuleList(
             [
@@ -189,6 +192,7 @@ class SpectralResUNet(MultiDimUNet):
         )
 
         new_model._first_block[0] = gen_from_Conv2d(self._first_block[0], ksize1=self.kbase1, ksize2=self.kbase2)
+        new_model._first_block[2].linear_layer = gen_from_Conv2d(self._first_block[2].linear_layer, ksize1=self.kbase1, ksize2=self.kbase2)
 
         for i in range(1, self._depth):
             new_model._down_conv_layers[i - 1].linear_layer = gen_from_Conv2d(
@@ -240,7 +244,12 @@ class SpectralUNet(MultiDimUNet):
         self.kernel_size = kernel_size
 
         ## Convolutional Layers
-        self._first_block = nn.Sequential(create_conv_layer(parametrization, in_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size), nn.ReLU())
+        self._first_block = nn.Sequential(
+            create_conv_layer(parametrization, in_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size),
+            nn.ReLU(),
+            create_conv_layer(parametrization, base_channels, base_channels, ksize1=kbase1, ksize2=kbase2, kernel_size=kernel_size),
+            nn.ReLU(),
+        )
         self._down_conv_layers = nn.ModuleList(
             [
                 nn.Sequential(
@@ -319,6 +328,7 @@ class SpectralUNet(MultiDimUNet):
         )
 
         new_model._first_block[0] = gen_from_Conv2d(self._first_block[0], ksize1=self.kbase1, ksize2=self.kbase2)
+        new_model._first_block[2] = gen_from_Conv2d(self._first_block[2], ksize1=self.kbase1, ksize2=self.kbase2)
 
         for i in range(1, self._depth):
             cast(nn.ModuleList, new_model._down_conv_layers[i - 1])[0] = gen_from_Conv2d(
