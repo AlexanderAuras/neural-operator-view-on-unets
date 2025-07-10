@@ -1,7 +1,13 @@
+from collections.abc import Sized
+from pathlib import Path
+from typing import Any, Self, cast
+
+import h5py
 import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
+from tqdm.auto import trange
 from typing_extensions import override
 
 
@@ -35,6 +41,15 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
         self.__smooth = smooth
         if smooth:
             self.__blurrer = v2.GaussianBlur(kernel_size=101, sigma=(100.0))
+        self.__file = None
+
+    @classmethod
+    def from_file(cls: type[Self], path: str | Path) -> Self:
+        instance = __class__.__new__(cls)
+        instance.__file = Path(path)
+        with h5py.File(path) as hdf_file:
+            instance.__image_count = len(hdf_file)
+        return instance
 
     def __len__(self) -> int:
         return self.__image_count
@@ -45,6 +60,10 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
             raise IndexError()
         if index >= self.__image_count:
             raise StopIteration()
+        if self.__file is not None:
+            with h5py.File(self.__file) as hdf_file:
+                input_ = cast(Any, hdf_file[str(index)])[:]
+            return {"input": torch.from_numpy(input_)}
         generator = torch.Generator()
         generator.manual_seed((index + self.__seed) % 2**32)
         sizes = torch.rand((1, 1, self.__ellipses_per_image, 2), generator=generator).sort(dim=-1, descending=True).values
@@ -75,3 +94,17 @@ class EllipsesDataset(Dataset[dict[str, Tensor]]):
         if self.__smooth:
             groundtruth = self.__blurrer(groundtruth.unsqueeze(0))[0]
         return {"input": groundtruth[None]}
+
+    def save_to_file(self, path: str | Path, progress: bool = False) -> None:
+        if self.__file is not None:
+            raise RuntimeError("Dataset already loaded from file")
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with h5py.File(path, "w") as hdf_file:
+            if progress:
+                iter_ = trange(len(cast(Sized, self)))
+            else:
+                iter_ = range(len(cast(Sized, self)))
+            for index in iter_:
+                item = self[index]
+                hdf_file.create_dataset(str(index), data=item["input"].numpy())

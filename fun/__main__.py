@@ -115,7 +115,7 @@ def main() -> None:
     argparser.add_argument("--max-epochs", type=int, default=10)
     argparser.add_argument("--lr", type=float, default=1e-3)
     argparser.add_argument("--model-save-freq", type=int, default=1)
-    argparser.add_argument("--noise-level", type=float, default=0.1)
+    argparser.add_argument("--noise-level", type=float, default=0.0)
     argparser.add_argument("--angle-percent", type=float, default=0.75)
     argparser.add_argument("--num-ellipses", type=int, default=10)
     argparser.add_argument("--smooth-data", dest="smooth", action="store_true")
@@ -194,180 +194,254 @@ def main() -> None:
     match args.dataset:
         case "ellipses-64x64":
             in_size = 64
-            # train_dataset = CTPostProcessDataset(
-            #     EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
-            #     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-            #     pos_count=128,
-            #     target_shape=(64, 64),
-            #     noise_type="gaussian",
-            #     noise_level=args.noise_level,
-            #     radon_device=args.devices[0],
-            # )
-            train_dataset = CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-64x64.h5")
+            train_dataset = CTPostProcessDataset(
+                EllipsesDataset.from_file(BASE_DATA_DIR / "train.h5"),
+                angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                pos_count=128,
+                target_shape=(64, 64),
+                noise_type="gaussian",
+                noise_level=args.noise_level,
+                radon_device=args.devices[0],
+            )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
-            # val_datasets = {
-            #     "64x64": CTPostProcessDataset(
-            #         EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
-            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-            #         pos_count=128,
-            #         target_shape=(64, 64),
-            #         noise_type="gaussian",
-            #         noise_level=args.noise_level,
-            #         radon_device=args.devices[0],
-            #     ),
-            # }
             val_datasets = {
-                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-64x64.h5"),
+                "64x64": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "val.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
             }
             test_datasets = {
-                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
-                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
-                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-256x256.h5"),
+                "64x64": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                "128x128": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                "256x256": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
             }
             exemplary_image_shape = (1, 64, 64)
         case "ellipses-128x128":
             in_size = 128
-            # train_dataset = CTPostProcessDataset(
-            #     EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
-            #     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-            #     pos_count=256,
-            #     target_shape=(128, 128),
-            #     noise_type="gaussian",
-            #     noise_level=args.noise_level,
-            #     radon_device=args.devices[0],
-            # )
-            train_dataset = CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-128x128.h5")
+            train_dataset = CTPostProcessDataset(
+                EllipsesDataset.from_file(BASE_DATA_DIR / "train.h5"),
+                angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                pos_count=256,
+                target_shape=(128, 128),
+                noise_type="gaussian",
+                noise_level=args.noise_level,
+                radon_device=args.devices[0],
+            )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
-            # val_datasets = {
-            #     "128x128": CTPostProcessDataset(
-            #         EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
-            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-            #         pos_count=256,
-            #         target_shape=(128, 128),
-            #         noise_type="gaussian",
-            #         noise_level=args.noise_level,
-            #         radon_device=args.devices[0],
-            #     ),
-            # }
             val_datasets = {
-                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-128x128.h5"),
+                "128x128": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "val.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
             }
             test_datasets = {
-                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
-                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
-                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-256x256.h5"),
+                "64x64": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                "128x128": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                "256x256": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
             }
             exemplary_image_shape = (1, 128, 128)
         case "ellipses-256x256":
             in_size = 256
-            # train_dataset = CTPostProcessDataset(
-            #     EllipsesDataset(6400, 1024, args.num_ellipses, smooth=args.smooth),
-            #     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-            #     pos_count=512,
-            #     target_shape=(256, 256),
-            #     noise_type="gaussian",
-            #     noise_level=args.noise_level,
-            #     radon_device=args.devices[0],
-            # )
-            train_dataset = CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-256x256.h5")
+            train_dataset = CTPostProcessDataset(
+                EllipsesDataset.from_file(BASE_DATA_DIR / "train.h5"),
+                angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                pos_count=512,
+                target_shape=(256, 256),
+                noise_type="gaussian",
+                noise_level=args.noise_level,
+                radon_device=args.devices[0],
+            )
             train_batch_sampler = torch.utils.data.BatchSampler(torch.utils.data.RandomSampler(train_dataset), batch_size=args.batch_size, drop_last=False)
-            # val_datasets = {
-            #     "256x256": CTPostProcessDataset(
-            #         EllipsesDataset(1600, 1024, args.num_ellipses, smooth=args.smooth),
-            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-            #         pos_count=512,
-            #         target_shape=(256, 256),
-            #         noise_type="gaussian",
-            #         noise_level=args.noise_level,
-            #         radon_device=args.devices[0],
-            #     ),
-            # }
             val_datasets = {
-                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-256x256.h5"),
+                "256x256": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "val.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
             }
             test_datasets = {
-                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
-                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
-                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-256x256.h5"),
+                "64x64": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                "128x128": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                "256x256": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
             }
             exemplary_image_shape = (1, 256, 256)
         case "ellipses-mixed":
             if args.model == "unet-interp":
                 raise ValueError("Model 'cno' is not supported for datasets with variable resolutions")
-            # train_datasets = [
-            #     CTPostProcessDataset(
-            #         EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
-            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-            #         pos_count=128,
-            #         target_shape=(64, 64),
-            #         noise_type="gaussian",
-            #         noise_level=args.noise_level,
-            #         radon_device=args.devices[0],
-            #     ),
-            #     CTPostProcessDataset(
-            #         EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
-            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-            #         pos_count=256,
-            #         target_shape=(128, 128),
-            #         noise_type="gaussian",
-            #         noise_level=args.noise_level,
-            #         radon_device=args.devices[0],
-            #     ),
-            #     CTPostProcessDataset(
-            #         EllipsesDataset(2133, 1024, args.num_ellipses, smooth=args.smooth),
-            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-            #         pos_count=512,
-            #         target_shape=(256, 256),
-            #         noise_type="gaussian",
-            #         noise_level=args.noise_level,
-            #         radon_device=args.devices[0],
-            #     ),
-            # ]
             train_datasets = [
-                torch.utils.data.Subset(CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-64x64.h5"), range(2133)),
-                torch.utils.data.Subset(CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-128x128.h5"), range(2133)),
-                torch.utils.data.Subset(CTPostProcessDataset.from_file(BASE_DATA_DIR / "train-256x256.h5"), range(2133)),
+                CTPostProcessDataset(
+                    torch.utils.data.Subset(EllipsesDataset.from_file(BASE_DATA_DIR / "train.h5"), range(2133)),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                CTPostProcessDataset(
+                    torch.utils.data.Subset(EllipsesDataset.from_file(BASE_DATA_DIR / "train.h5"), range(2133)),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                CTPostProcessDataset(
+                    torch.utils.data.Subset(EllipsesDataset.from_file(BASE_DATA_DIR / "train.h5"), range(2133)),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
             ]
             train_dataset = torch.utils.data.ConcatDataset(train_datasets)
             train_batch_sampler = MultiResolutionBatchSampler([len(x) for x in train_datasets], batch_size=args.batch_size, shuffle=True, drop_incomplete=False)
-            # val_datasets = {
-            #     "64x64": CTPostProcessDataset(
-            #         EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
-            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-            #         pos_count=128,
-            #         target_shape=(64, 64),
-            #         noise_type="gaussian",
-            #         noise_level=args.noise_level,
-            #         radon_device=args.devices[0],
-            #     ),
-            #     "128x128": CTPostProcessDataset(
-            #         EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
-            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-            #         pos_count=256,
-            #         target_shape=(128, 128),
-            #         noise_type="gaussian",
-            #         noise_level=args.noise_level,
-            #         radon_device=args.devices[0],
-            #     ),
-            #     "256x256": CTPostProcessDataset(
-            #         EllipsesDataset(533, 1024, args.num_ellipses, smooth=args.smooth),
-            #         angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-            #         pos_count=512,
-            #         target_shape=(256, 256),
-            #         noise_type="gaussian",
-            #         noise_level=args.noise_level,
-            #         radon_device=args.devices[0],
-            #     ),
-            # }
             val_datasets = {
-                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-64x64.h5"),
-                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-128x128.h5"),
-                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "val-256x256.h5"),
+                "64x64": CTPostProcessDataset(
+                    torch.utils.data.Subset(EllipsesDataset.from_file(BASE_DATA_DIR / "val.h5"), range(533)),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                "128x128": CTPostProcessDataset(
+                    torch.utils.data.Subset(EllipsesDataset.from_file(BASE_DATA_DIR / "val.h5"), range(533)),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                "256x256": CTPostProcessDataset(
+                    torch.utils.data.Subset(EllipsesDataset.from_file(BASE_DATA_DIR / "val.h5"), range(533)),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
             }
             test_datasets = {
-                "64x64": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-64x64.h5"),
-                "128x128": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-128x128.h5"),
-                "256x256": CTPostProcessDataset.from_file(BASE_DATA_DIR / "test-256x256.h5"),
+                "64x64": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
+                    pos_count=128,
+                    target_shape=(64, 64),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                "128x128": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
+                    pos_count=256,
+                    target_shape=(128, 128),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
+                "256x256": CTPostProcessDataset(
+                    EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"),
+                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
+                    pos_count=512,
+                    target_shape=(256, 256),
+                    noise_type="gaussian",
+                    noise_level=args.noise_level,
+                    radon_device=args.devices[0],
+                ),
             }
             exemplary_image_shape = (1, 256, 256)
         case "ellipses-sweep":
@@ -378,7 +452,7 @@ def main() -> None:
             val_datasets = {}
             test_datasets = {
                 f"{r}x{r}": CTPostProcessDataset(
-                    EllipsesDataset(200, 1024, args.num_ellipses, smooth=args.smooth),
+                    torch.utils.data.Subset(EllipsesDataset.from_file(BASE_DATA_DIR / "test.h5"), range(200)),
                     angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(4 * r * args.angle_percent)),
                     pos_count=2 * r,
                     target_shape=(r, r),

@@ -43,35 +43,32 @@
             "command": "${command:python.interpreterPath}",
             "args": [
                 "${workspaceFolder}/fun/data/gen_data.py",
+                "--out-dir=${workspaceFolder}/data",
+                //"--device=cuda"
+                "ellipses",
+                "${input:split}",
                 "${input:n}",
-                "${input:output_dir}",
-                "--dataset=${input:dataset}",
-                "--device=cuda"
             ],
             "problemMatcher": [],
         }
     ],
     "inputs": [
         {
-            "id": "dataset",
+            "id": "split",
             "type": "pickString",
-            "description": "Select the dataset to generate test data for",
+            "description": "Select the dataset split to generate data for",
             "options": [
-                "ellipses",
+                "train",
+                "val",
+                "test",
             ],
-            "default": "ellipses",
-        },
-        {
-            "id": "output_dir",
-            "type": "promptString",
-            "description": "Select the directory to save the generated test data to",
-            "default": "${workspaceFolder}/data",
+            "default": "train",
         },
         {
             "id": "n",
             "type": "promptString",
             "description": "Enter the mount of samples to generate",
-            "default": "2000",
+            "default": "6400",
         }
     ]
 }

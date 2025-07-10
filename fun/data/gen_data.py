@@ -1,6 +1,5 @@
 import argparse
 import logging
-from math import ceil
 from pathlib import Path
 import random
 import sys
@@ -10,7 +9,6 @@ import numpy as np
 import torch
 import torch.backends.cudnn
 
-from fun.data.ct_dataset import CTPostProcessDataset
 from fun.data.ellipses_dataset import EllipsesDataset
 from fun.utils.formatters import ColoringIndentingFormatter
 
@@ -18,17 +16,16 @@ from fun.utils.formatters import ColoringIndentingFormatter
 def main() -> None:
     # Parse command line arguments
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("n", type=int, default=2000)
     argparser.add_argument("--seed", type=int, default=random.randrange(0, 2**32))
     argparser.add_argument("--precision", choices=["high", "medium", "low"], default="medium")
-    argparser.add_argument("--device", type=torch.device, default=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-    argparser.add_argument("--dataset", choices=["ellipses"], required=True)
-    argparser.add_argument("--noise-level", type=float, default=0.0)
-    argparser.add_argument("--angle-percent", type=float, default=0.75)
+    # argparser.add_argument("--device", type=torch.device, default=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     argparser.add_argument("--num-ellipses", type=int, default=10)
-    argparser.add_argument("--similar", action="store_true")
-    argparser.add_argument("out", type=Path)
-    argparser.add_argument("--smooth-data", dest="smooth", action="store_true")
+    argparser.add_argument("--smooth", dest="smooth", action="store_true")
+    argparser.add_argument("--res", type=int, default=1024)
+    argparser.add_argument("--out-dir", type=Path, default=Path.cwd())
+    argparser.add_argument("dataset", choices=["ellipses"])
+    argparser.add_argument("split", choices=["train", "val", "test"])
+    argparser.add_argument("n", type=int)
     args = argparser.parse_args()
 
     logging.getLogger().setLevel(logging.DEBUG)
@@ -60,45 +57,23 @@ def main() -> None:
     logger.info("Creating datasets")
     match args.dataset:
         case "ellipses":
-            dataset = EllipsesDataset(args.n, 1024, args.num_ellipses, smooth=args.smooth)
-            all_datasets = {
-                "64x64": CTPostProcessDataset(
-                    dataset if args.similar else EllipsesDataset(args.n, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(256 * args.angle_percent)),
-                    pos_count=128,
-                    target_shape=(64, 64),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.device,
-                ),
-                "128x128": CTPostProcessDataset(
-                    dataset if args.similar else EllipsesDataset(args.n, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(512 * args.angle_percent)),
-                    pos_count=256,
-                    target_shape=(128, 128),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.device,
-                ),
-                "256x256": CTPostProcessDataset(
-                    dataset if args.similar else EllipsesDataset(args.n, 1024, args.num_ellipses, smooth=args.smooth),
-                    angles=torch.linspace(0.0, torch.pi * args.angle_percent, ceil(1024 * args.angle_percent)),
-                    pos_count=512,
-                    target_shape=(256, 256),
-                    noise_type="gaussian",
-                    noise_level=args.noise_level,
-                    radon_device=args.device,
-                ),
-            }
+            if args.split == "train":
+                datasets = {
+                    "": EllipsesDataset(args.n, args.res, args.num_ellipses, smooth=args.smooth),
+                }
+            else:
+                datasets = {
+                    "": EllipsesDataset(args.n, args.res, args.num_ellipses, smooth=args.smooth),
+                }
         case _:
             raise ValueError(f'Unknown dataset: "{args.dataset}"')
 
     logger.info("Saving datasets to file")
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    for name, dataset in all_datasets.items():
-        dataset.save_to_file(args.out.with_name(args.out.name.format(name)).with_suffix(".h5"), progress=True)
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    for name, dataset in datasets.items():
+        dataset.save_to_file(args.out_dir / f"{args.split}{chr(45) if len(name) > 0 else str()}{name}.h5", progress=True)
         logger.info(f"Saved {name} dataset to file")
-        logger.debug(f"    Path: {args.out.with_name(args.out.name.format(name)).with_suffix('.h5')}")
+        logger.debug(f"    Path: {args.out_dir / f'{args.split}{chr(45) if len(name) > 0 else str()}{name}.h5'}")
 
     logger.info("Data generated successfully")
 
