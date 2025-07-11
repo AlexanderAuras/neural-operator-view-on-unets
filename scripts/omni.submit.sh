@@ -28,7 +28,7 @@ module load miniconda3
 source /cm/shared/omni/apps/miniconda3/bin/activate FNO-UNet
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/aa609734/.conda/envs/FNO-UNet/lib/python3.11/site-packages/nvidia/cufft/lib
-export CUDA_HOME=/home/alexander/anaconda3/envs/FNO-UNet
+export CUDA_HOME=/home/aa609734/.conda/envs/FNO-UNet
 export CUBLAS_WORKSPACE_CONFIG=:4096:8
 /home/aa609734/.conda/envs/FNO-UNet/bin/python /home/aa609734/Projects/FNO-UNet/fun/__main__.py\
     --no-compile\
