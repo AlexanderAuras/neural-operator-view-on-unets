@@ -460,7 +460,7 @@ def main() -> None:
                     noise_level=args.noise_level,
                 )
                 #for r in range(*((64, 1025, 64) if args.model == "unet-interp" else (16, 1025, 16)))
-                for r in [x for i in range(4, 10) for x in [2**i, 2**i+2**(i-2)+1, 2**i+2**(i-1), 2**(i+1)-2**(i-2)-1, 2**i+1]]
+                for r in ([x for i in range(4, 9) for x in [2**i, 2**i+2**(i-2)+1, 2**i+2**(i-1), 2**(i+1)-2**(i-2)-1]] + [2**9])
             }
             exemplary_image_shape = (1, 256, 256)
         case _:
