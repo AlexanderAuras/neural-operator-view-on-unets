@@ -13,9 +13,9 @@ module purge
 
 export CUBLAS_WORKSPACE_CONFIG=:4096:8
 
-NUM='1'
+NUM='2'
 
-python ../fun/__main__.py --no-compile --max-epochs=10 --devices cuda:0 --num-workers=0 --model-save-freq=9999 --forced-run-name="UNO-64x64-$NUM"      --model=uno         --dataset=ellipses-64x64   --batch-size=1  --accumulation-steps=32 --cpu-opt-state 
-python ../fun/__main__.py --no-compile --max-epochs=10 --devices cuda:0 --num-workers=0 --model-save-freq=9999 --forced-run-name="UNO-128x128-$NUM"    --model=uno         --dataset=ellipses-128x128 --batch-size=1  --accumulation-steps=32 --cpu-opt-state
-python ../fun/__main__.py --no-compile --max-epochs=10 --devices cuda:0 --num-workers=0 --model-save-freq=9999 --forced-run-name="UNO-256x256-$NUM"    --model=uno         --dataset=ellipses-256x256 --batch-size=1  --accumulation-steps=32 --cpu-opt-state
-python ../fun/__main__.py --no-compile --max-epochs=10 --devices cuda:0 --num-workers=0 --model-save-freq=9999 --forced-run-name="UNO-mixed-$NUM"      --model=uno         --dataset=ellipses-mixed   --batch-size=1  --accumulation-steps=32 --cpu-opt-state
+python ../../fun/__main__.py --no-compile --max-epochs=10 --devices cuda:0 --num-workers=0 --model-save-freq=9999 --forced-run-name="UNO-64x64-$NUM"      --model=uno         --dataset=ellipses-64x64   --batch-size=1  --accumulation-steps=32 --cpu-opt-state 
+python ../../fun/__main__.py --no-compile --max-epochs=10 --devices cuda:0 --num-workers=0 --model-save-freq=9999 --forced-run-name="UNO-128x128-$NUM"    --model=uno         --dataset=ellipses-128x128 --batch-size=1  --accumulation-steps=32 --cpu-opt-state
+python ../../fun/__main__.py --no-compile --max-epochs=10 --devices cuda:0 --num-workers=0 --model-save-freq=9999 --forced-run-name="UNO-256x256-$NUM"    --model=uno         --dataset=ellipses-256x256 --batch-size=1  --accumulation-steps=32 --cpu-opt-state
+python ../../fun/__main__.py --no-compile --max-epochs=10 --devices cuda:0 --num-workers=0 --model-save-freq=9999 --forced-run-name="UNO-mixed-$NUM"      --model=uno         --dataset=ellipses-mixed   --batch-size=1  --accumulation-steps=32 --cpu-opt-state
