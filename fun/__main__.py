@@ -41,6 +41,7 @@ import torch.utils.data
 from torch.utils.data import DataLoader
 import torch.utils.tensorboard
 import torchinfo
+import torchmetrics.functional.image
 import torchview
 from tqdm.auto import tqdm, trange
 
@@ -754,10 +755,23 @@ def main() -> None:
         file.write("dataset,metric,value\n")
     out_dir.joinpath("test-imgs").mkdir(parents=True)
     all_test_loss = 0.0
+    all_baseline_loss = 0.0
+    all_test_mse = 0.0
+    all_baseline_mse = 0.0
+    all_test_psnr = 0.0
+    all_baseline_psnr = 0.0
+    all_test_ssim = 0.0
+    all_baseline_ssim = 0.0
     for name, dataloader in tqdm(test_dataloaders.items(), desc="Testing", unit="dataset", position=0, leave=True):
         try:
             test_loss = 0.0
             baseline_loss = 0.0
+            test_mse = 0.0
+            baseline_mse = 0.0
+            test_psnr = 0.0
+            baseline_psnr = 0.0
+            test_ssim = 0.0
+            baseline_ssim = 0.0
             for i, sample in tqdm(enumerate(dataloader), total=len(dataloader), desc=name, unit="batch", position=1, leave=False):
                 input_ = sample["input"].to(args.devices[0])
                 target = sample["target"].to(args.devices[0])
@@ -767,6 +781,12 @@ def main() -> None:
                 prediction = fwd_func(input_)
                 test_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
                 baseline_loss += loss_function(input_, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
+                test_mse += torch.nn.functional.mse_loss(prediction, target).item()
+                baseline_mse += torch.nn.functional.mse_loss(input_, target).item()
+                test_psnr += torchmetrics.functional.image.peak_signal_noise_ratio(prediction, target, data_range=1.0, dim=0).item()
+                baseline_psnr += torchmetrics.functional.image.peak_signal_noise_ratio(input_, target, data_range=1.0, dim=0).item()
+                test_ssim += cast(Tensor, torchmetrics.functional.image.structural_similarity_index_measure(prediction, target, data_range=1.0)).item()
+                baseline_ssim += cast(Tensor, torchmetrics.functional.image.structural_similarity_index_measure(input_, target, data_range=1.0)).item()
                 if i == 0:
                     for j in range(min(4, input_.shape[0])):
                         np.save(out_dir / "test-imgs" / f"{name}-input-{j}.npy", input_[j].cpu().detach().numpy())
@@ -783,21 +803,55 @@ def main() -> None:
                         tb_logger.add_image(f"test/{name}-prediction-{j}", normalized(prediction[j]), global_step=0)
             test_loss /= len(dataloader)
             baseline_loss /= len(dataloader)
+            all_baseline_loss += baseline_loss
             all_test_loss += test_loss
+            all_baseline_mse += baseline_mse
+            all_test_mse += test_mse
+            all_baseline_psnr += baseline_psnr
+            all_test_psnr += test_psnr
+            all_baseline_ssim += baseline_ssim
+            all_test_ssim += test_ssim
             logger.info(f'Final test loss on "{name}": {test_loss:.3e}')
             with out_dir.joinpath("test-results.csv").open("a") as file:
                 file.write(f"{name},loss,{test_loss}\n")
+                file.write(f"{name},mse,{test_mse}\n")
+                file.write(f"{name},psnr,{test_psnr}\n")
+                file.write(f"{name},ssim,{test_ssim}\n")
             with out_dir.joinpath("baseline.csv").open("a") as file:
                 file.write(f"{name},loss,{baseline_loss}\n")
+                file.write(f"{name},mse,{baseline_mse}\n")
+                file.write(f"{name},psnr,{baseline_psnr}\n")
+                file.write(f"{name},ssim,{baseline_ssim}\n")
             tb_logger.add_scalar(f"test/{name}-loss", test_loss, global_step=0)
+            tb_logger.add_scalar(f"test/{name}-mse", test_mse, global_step=0)
+            tb_logger.add_scalar(f"test/{name}-psnr", test_psnr, global_step=0)
+            tb_logger.add_scalar(f"test/{name}-ssim", test_ssim, global_step=0)
             tb_logger.add_scalar(f"baseline/{name}-loss", baseline_loss, global_step=0)
+            tb_logger.add_scalar(f"baseline/{name}-mse", baseline_mse, global_step=0)
+            tb_logger.add_scalar(f"baseline/{name}-psnr", baseline_psnr, global_step=0)
+            tb_logger.add_scalar(f"baseline/{name}-ssim", baseline_ssim, global_step=0)
         except Exception as e:
             logger.error(f"Error during testing on dataset {name}: {e}")
             continue
     all_test_loss /= len(test_dataloaders)
     with out_dir.joinpath("test-results.csv").open("a") as file:
         file.write(f"all-avg,loss,{all_test_loss}\n")
+        file.write(f"all-avg,mse,{all_test_mse}\n")
+        file.write(f"all-avg,psnr,{all_test_psnr}\n")
+        file.write(f"all-avg,ssim,{all_test_ssim}\n")
+    with out_dir.joinpath("baseline.csv").open("a") as file:
+        file.write(f"all-avg,loss,{all_baseline_loss}\n")
+        file.write(f"all-avg,mse,{all_baseline_mse}\n")
+        file.write(f"all-avg,psnr,{all_baseline_psnr}\n")
+        file.write(f"all-avg,ssim,{all_baseline_ssim}\n")
     tb_logger.add_scalar("test/avg-all-loss", all_test_loss, global_step=0)
+    tb_logger.add_scalar("test/avg-all-mse", all_test_mse, global_step=0)
+    tb_logger.add_scalar("test/avg-all-psnr", all_test_psnr, global_step=0)
+    tb_logger.add_scalar("test/avg-all-ssim", all_test_ssim, global_step=0)
+    tb_logger.add_scalar("baseline/avg-all-loss", all_baseline_loss, global_step=0)
+    tb_logger.add_scalar("baseline/avg-all-mse", all_baseline_mse, global_step=0)
+    tb_logger.add_scalar("baseline/avg-all-psnr", all_baseline_psnr, global_step=0)
+    tb_logger.add_scalar("baseline/avg-all-ssim", all_baseline_ssim, global_step=0)
     logger.info(f"Final avg. test loss on all datasets: {all_test_loss:.3e}")
 
     # Cleanup
