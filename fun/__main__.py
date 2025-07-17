@@ -460,8 +460,8 @@ def main() -> None:
                     noise_type="gaussian",
                     noise_level=args.noise_level,
                 )
-                #for r in range(*((64, 1025, 64) if args.model == "unet-interp" else (16, 1025, 16)))
-                for r in ([x for i in range(4, 9) for x in [2**i, 2**i+2**(i-2)+1, 2**i+2**(i-1), 2**(i+1)-2**(i-2)-1]] + [2**9])
+                # for r in range(*((64, 1025, 64) if args.model == "unet-interp" else (16, 1025, 16)))
+                for r in ([x for i in range(4, 9) for x in [2**i, 2**i + 2 ** (i - 2) + 1, 2**i + 2 ** (i - 1), 2 ** (i + 1) - 2 ** (i - 2) - 1]] + [2**9])
             }
             exemplary_image_shape = (1, 256, 256)
         case _:
@@ -803,6 +803,12 @@ def main() -> None:
                         tb_logger.add_image(f"test/{name}-prediction-{j}", normalized(prediction[j]), global_step=0)
             test_loss /= len(dataloader)
             baseline_loss /= len(dataloader)
+            test_mse /= len(dataloader)
+            baseline_mse /= len(dataloader)
+            test_psnr /= len(dataloader)
+            baseline_psnr /= len(dataloader)
+            test_ssim /= len(dataloader)
+            baseline_ssim /= len(dataloader)
             all_baseline_loss += baseline_loss
             all_test_loss += test_loss
             all_baseline_mse += baseline_mse
@@ -834,6 +840,12 @@ def main() -> None:
             logger.error(f"Error during testing on dataset {name}: {e}")
             continue
     all_test_loss /= len(test_dataloaders)
+    all_test_mse /= len(test_dataloaders)
+    all_baseline_mse /= len(test_dataloaders)
+    all_test_psnr /= len(test_dataloaders)
+    all_baseline_psnr /= len(test_dataloaders)
+    all_test_ssim /= len(test_dataloaders)
+    all_baseline_ssim /= len(test_dataloaders)
     with out_dir.joinpath("test-results.csv").open("a") as file:
         file.write(f"all-avg,loss,{all_test_loss}\n")
         file.write(f"all-avg,mse,{all_test_mse}\n")
