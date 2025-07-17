@@ -80,6 +80,7 @@ class InterpolatingUNet(UNetBase):
         base_input_size: int,
         max_scale_factor: int,
         upscale_weights: bool = False,
+        three_initial_convs: bool = False,
     ) -> None:
         super().__init__(in_channels, out_channels, depth, base_channels, use_checkpointing)
         self._down_blocks = nn.ModuleList(
@@ -89,6 +90,11 @@ class InterpolatingUNet(UNetBase):
                     nn.ReLU(),
                     InterpolatingConv2d(base_channels, base_channels, 3, base_input_size, max_scale_factor, padding="same", upscale_weights=upscale_weights),
                     nn.ReLU(),
+                    *(
+                        [InterpolatingConv2d(base_channels, base_channels, 3, base_input_size, max_scale_factor, padding="same", upscale_weights=upscale_weights), nn.ReLU()]
+                        if three_initial_convs
+                        else []
+                    ),
                 )
             ]
             + [

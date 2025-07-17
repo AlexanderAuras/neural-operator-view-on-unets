@@ -44,6 +44,7 @@ aiohttp = "!=3.11.14"  # Autoselected version 3.11.14 is yanked
 scipy = "^1.15.3"
 neuraloperator = {git = "https://github.com/AlexanderAuras/neuraloperator"}
 cno = {git = "https://github.com/AlexanderAuras/ConvolutionalNeuralOperator"}
+torchmetrics = "^1.7.4"
 
 [[tool.poetry.source]]
 name = "torch-cuda"
