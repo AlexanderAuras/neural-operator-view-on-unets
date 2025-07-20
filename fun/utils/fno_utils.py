@@ -119,16 +119,17 @@ class TrigonometricResize_2d(nn.Module):
         self.check_comp = check_comp
 
     @override
-    def __call__(self, x: Tensor, keep_shape: bool = False) -> Tensor | tuple[Tensor, bool]:
-        if keep_shape or (not self.downsample and not self.upsample):
-            return x
-        elif self.upsample and self.downsample:
+    def __call__(self, x: Tensor, keep_shape: int = None) -> Tensor | tuple[Tensor, bool]:
+        if self.upsample and self.downsample: # this is the standard case
             im_shape_new = np.array(self.shape)
-        elif not self.upsample:
-            im_shape_new = np.minimum(np.array(self.shape), np.array(x.shape[-2:]))
-            keep_shape = np.min(im_shape_new == np.array(x.shape[-2:]))
-        elif not self.downsample:
-            im_shape_new = np.maximum(np.array(self.shape), np.array(x.shape[-2:]))
+        elif not self.upsample: # this is the special case for contracting path (down) of spectral UNet 
+            im_shape_new = np.minimum(np.array(self.shape), np.array(x.shape[-2:])) # only downsampling
+            keep_shape = x.shape[-1] # remember which size came in for upsampling 
+        elif not self.downsample: # this is the special case for expanding path (up) of spectral UNet
+            if keep_shape is None:
+                im_shape_new = np.maximum(np.array(self.shape), np.array(x.shape[-2:]))
+            else:
+                im_shape_new = np.array([keep_shape, keep_shape]) # upsample to remembered size
         else:
             raise NotImplementedError("Either upsampling or downsampling has to be True")
 
