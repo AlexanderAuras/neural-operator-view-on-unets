@@ -15,34 +15,34 @@
 
 
 import argparse
-from contextlib import redirect_stderr, redirect_stdout
 import datetime
 import logging
 import logging.config
-from math import ceil
 import os
-from pathlib import Path
 import random
 import shutil
 import sys
-from typing import cast
 import warnings
 import zipfile
+from contextlib import redirect_stderr, redirect_stdout
+from math import ceil
+from pathlib import Path
+from typing import cast
 
-from cno.CNOModule import CNO
-from neuralop.models import UNO
 import numpy as np
 import PIL.Image as Image
 import randomname
 import torch
-from torch import Tensor, nn
 import torch.backends.cudnn
 import torch.utils.data
-from torch.utils.data import DataLoader
 import torch.utils.tensorboard
 import torchinfo
 import torchmetrics.functional.image
 import torchview
+from cno.CNOModule import CNO
+from neuralop.models import UNO
+from torch import Tensor, nn
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm, trange
 
 from fun.data.ct_dataset import CTPostProcessDataset
@@ -53,7 +53,6 @@ from fun.models.dncnn import DnCNN
 from fun.models.interp_unet import InterpolatingUNet
 from fun.models.spectral_unet import SpectralResUNet
 from fun.utils.diff_utils import DiffConv2d
-
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
 BASE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -245,7 +244,7 @@ def main() -> None:
                     radon_device=args.devices[0],
                 ),
             }
-            exemplary_image_shape = (1, 64, 64)
+            exemplary_image_shape = (1, args.resize_input_size, args.resize_input_size) if args.resize_input_size is not None else (1, 64, 64)
         case "ellipses-128x128":
             in_size = 128
             train_dataset = CTPostProcessDataset(
@@ -298,7 +297,7 @@ def main() -> None:
                     radon_device=args.devices[0],
                 ),
             }
-            exemplary_image_shape = (1, 128, 128)
+            exemplary_image_shape = (1, args.resize_input_size, args.resize_input_size) if args.resize_input_size is not None else (1, 128, 128)
         case "ellipses-256x256":
             in_size = 256
             train_dataset = CTPostProcessDataset(
@@ -351,10 +350,12 @@ def main() -> None:
                     radon_device=args.devices[0],
                 ),
             }
-            exemplary_image_shape = (1, 256, 256)
+            exemplary_image_shape = (1, args.resize_input_size, args.resize_input_size) if args.resize_input_size is not None else (1, 256, 256)
         case "ellipses-mixed":
             if args.model == "unet-interp":
                 raise ValueError("Model 'cno' is not supported for datasets with variable resolutions")
+            else:
+                in_size = args.resize_input_size
             train_datasets = [
                 CTPostProcessDataset(
                     torch.utils.data.Subset(EllipsesDataset.from_file(BASE_DATA_DIR / "train.h5"), range(2133)),
@@ -444,10 +445,12 @@ def main() -> None:
                     radon_device=args.devices[0],
                 ),
             }
-            exemplary_image_shape = (1, 256, 256)
+            exemplary_image_shape = (1, args.resize_input_size, args.resize_input_size) if args.resize_input_size is not None else (1, 256, 256)
         case "ellipses-sweep":
             if args.model == "cno" and args.resize_input_size is None:
                 raise ValueError("Model 'cno' is not supported for datasets with variable resolutions")
+            else:
+                in_size = args.resize_input_size
             train_dataset = cast(torch.utils.data.Dataset[dict[str, Tensor]], [{"input": torch.empty(0), "target": torch.empty(0)}])
             train_batch_sampler = MultiResolutionBatchSampler([1], batch_size=args.batch_size, shuffle=True, drop_incomplete=False)
             val_datasets = {}
@@ -463,7 +466,7 @@ def main() -> None:
                 # for r in range(*((64, 1025, 64) if args.model == "unet-interp" else (16, 1025, 16)))
                 for r in ([x for i in range(4, 9) for x in [2**i, 2**i + 2 ** (i - 2) + 1, 2**i + 2 ** (i - 1), 2 ** (i + 1) - 2 ** (i - 2) - 1]] + [2**9])
             }
-            exemplary_image_shape = (1, 256, 256)
+            exemplary_image_shape = (1, args.resize_input_size, args.resize_input_size) if args.resize_input_size is not None else (1, 256, 256)
         case _:
             raise ValueError(f'Unknown dataset: "{args.dataset}"')
     logger.info("Creating dataloaders")
