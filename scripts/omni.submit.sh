@@ -17,7 +17,9 @@
 #SBATCH --signal=30@300
 
 #SBATCH --output=/dev/null
+#SATCH --output=runs/%x.out
 #SBATCH --error=/dev/null
+#SATCH --error=runs/%x.err
 
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT,ARRAY_TASKS
 #SBATCH --mail-user=alexander.auras@uni-siegen.de

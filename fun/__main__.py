@@ -1,48 +1,32 @@
-# import os
-# import sys
-#
-#
-# sys.path.append(os.path.join(os.getcwd(), ".."))
-#
-# for desired_path in ("/software/gcc/10.5/bin", "/usr/local/cuda-12.1/bin"):
-#     print(desired_path, end="")
-#     if desired_path not in os.environ["PATH"]:
-#         print(" - adding")
-#         os.environ["PATH"] = f"{desired_path}:{os.environ['PATH']}"
-#     else:
-#         print(" - already added")
-# print(os.environ["PATH"])
-
-
 import argparse
+from contextlib import redirect_stderr, redirect_stdout
 import datetime
 import logging
 import logging.config
+from math import ceil
 import os
+from pathlib import Path
 import random
 import shutil
 import sys
+from typing import cast
 import warnings
 import zipfile
-from contextlib import redirect_stderr, redirect_stdout
-from math import ceil
-from pathlib import Path
-from typing import cast
 
+from cno.CNOModule import CNO
+from neuralop.models import UNO
 import numpy as np
 import PIL.Image as Image
 import randomname
 import torch
+from torch import Tensor, nn
 import torch.backends.cudnn
 import torch.utils.data
+from torch.utils.data import DataLoader
 import torch.utils.tensorboard
 import torchinfo
 import torchmetrics.functional.image
 import torchview
-from cno.CNOModule import CNO
-from neuralop.models import UNO
-from torch import Tensor, nn
-from torch.utils.data import DataLoader
 from tqdm.auto import tqdm, trange
 
 from fun.data.ct_dataset import CTPostProcessDataset
@@ -53,6 +37,7 @@ from fun.models.dncnn import DnCNN
 from fun.models.interp_unet import InterpolatingUNet
 from fun.models.spectral_unet import SpectralResUNet
 from fun.utils.diff_utils import DiffConv2d
+
 
 BASE_OUT_DIR = Path(__file__).resolve().parents[1] / "runs"
 BASE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -595,10 +580,7 @@ def main() -> None:
                 target = sample["target"].to(args.devices[0])
                 if args.resize_input_size is not None:
                     input_resize = nn.functional.interpolate(input_, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
-                    prediction_preresize = fwd_func(input_resize)
-                    prediction = nn.functional.interpolate(prediction_preresize,
-                                                       size=(target.shape[-2],target.shape[-1]),
-                                                       mode='bilinear', align_corners=False)
+                    prediction = nn.functional.interpolate(fwd_func(input_resize), size=(target.shape[-2], target.shape[-1]), mode="bilinear", align_corners=False)
                 else:
                     prediction = fwd_func(input_)
                 val_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
@@ -644,15 +626,10 @@ def main() -> None:
                 for batch_no, sample in batches_iter:
                     input_ = sample["input"].to(args.devices[0])
                     target = sample["target"].to(args.devices[0])
-                    if args.resize_input_size is not None:
-                        input_resize = nn.functional.interpolate(input_, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
-                        #target = nn.functional.interpolate(target, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
                     with torch.enable_grad():
                         if args.resize_input_size is not None:
-                            prediction_preresize = fwd_func(input_resize)
-                            prediction = nn.functional.interpolate(prediction_preresize,
-                                                       size=(target.shape[-2],target.shape[-1]),
-                                                       mode='bilinear', align_corners=False)
+                            input_resize = nn.functional.interpolate(input_, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
+                            prediction = nn.functional.interpolate(fwd_func(input_resize), size=(target.shape[-2], target.shape[-1]), mode="bilinear", align_corners=False)
                         else:
                             prediction = fwd_func(input_)
                         loss = loss_function(prediction, target) * ((input_.shape[-1] / 100) if args.interp_mode else 1) / args.accumulation_steps
@@ -689,10 +666,7 @@ def main() -> None:
                         target = sample["target"].to(args.devices[0])
                         if args.resize_input_size is not None:
                             input_resize = nn.functional.interpolate(input_, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
-                            prediction_preresize = fwd_func(input_resize)
-                            prediction = nn.functional.interpolate(prediction_preresize,
-                                                               size=(target.shape[-2],target.shape[-1]),
-                                                               mode='bilinear', align_corners=False)
+                            prediction = nn.functional.interpolate(fwd_func(input_resize), size=(target.shape[-2], target.shape[-1]), mode="bilinear", align_corners=False)
                         else:
                             prediction = fwd_func(input_)
                         val_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
@@ -794,10 +768,7 @@ def main() -> None:
                 target = sample["target"].to(args.devices[0])
                 if args.resize_input_size is not None:
                     input_resize = nn.functional.interpolate(input_, size=(args.resize_input_size, args.resize_input_size), mode="bilinear", align_corners=False)
-                    prediction_preresize = fwd_func(input_resize)
-                    prediction = nn.functional.interpolate(prediction_preresize,
-                                                       size=(target.shape[-2],target.shape[-1]),
-                                                       mode='bilinear', align_corners=False)
+                    prediction = nn.functional.interpolate(fwd_func(input_resize), size=(target.shape[-2], target.shape[-1]), mode="bilinear", align_corners=False)
                 else:
                     prediction = fwd_func(input_)
                 test_loss += loss_function(prediction, target).item() * ((input_.shape[-1] / 100) if args.interp_mode else 1)
