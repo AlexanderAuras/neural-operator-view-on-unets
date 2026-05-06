@@ -256,3 +256,14 @@ def gen_from_Conv2d(conv: nn.Module, ksize1: int, ksize2: int, norm: Literal["fo
     spec_conv.weight = nn.Parameter(spatial_to_spectral(spatial_weight, im_shape=(ksize1, ksize2), conv_like_cnn=True))
     spec_conv.bias = nn.Parameter(conv.bias.clone() if conv.bias is not None else torch.empty((out_channels,)))
     return spec_conv
+
+
+class Residual_Layer(nn.Module):
+    def __init__(self, linear_layer: nn.Module, activation_function: nn.Module) -> None:
+        super().__init__()
+        self.linear_layer = linear_layer
+        self.activation_function = activation_function
+
+    @override
+    def forward(self, x: Tensor) -> Tensor:
+        return x + self.activation_function(self.linear_layer(x))
