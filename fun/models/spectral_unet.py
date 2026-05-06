@@ -6,9 +6,9 @@ from torch import Tensor, nn
 import torch.utils.checkpoint
 from typing_extensions import override
 
-from fun.models.fno_unet import Residual_Layer
+# from fun.models.fno_unet import Residual_Layer
 from fun.models.unet_base import UNetBase
-from fun.utils.fno_utils import SpectralConv2d, TrigonometricResize_2d, gen_from_Conv2d
+from fun.utils.fno_utils import SpectralConv2d, TrigonometricResize_2d, gen_from_Conv2d, Residual_Layer
 
 
 class MultiDimUNet(UNetBase):
